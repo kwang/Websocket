@@ -93,6 +93,7 @@ HTML_CONTENT = """
         let audioChunks = [];
         let ws;
         let isConnected = false;
+        let audioContext;
 
         function addMessage(content, role) {
             const conversation = document.getElementById('conversation');
@@ -107,6 +108,32 @@ HTML_CONTENT = """
             document.getElementById('status').textContent = message;
         }
 
+        async function playAudio(base64Audio) {
+            try {
+                // Convert base64 to ArrayBuffer
+                const binaryString = window.atob(base64Audio);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+
+                // Create audio context if it doesn't exist
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                // Decode and play the audio
+                const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+            } catch (error) {
+                console.error('Error playing audio:', error);
+            }
+        }
+
         async function connectWebSocket() {
             try {
                 ws = new WebSocket('ws://localhost:8000/ws');
@@ -116,10 +143,13 @@ HTML_CONTENT = """
                     updateStatus('Connected to server');
                 };
                 
-                ws.onmessage = function(event) {
+                ws.onmessage = async function(event) {
                     const data = JSON.parse(event.data);
                     if (data.type === 'greeting' || data.type === 'follow_up') {
                         addMessage(data.message, 'interviewer');
+                        if (data.audio) {
+                            await playAudio(data.audio);
+                        }
                     }
                 };
 
@@ -159,6 +189,11 @@ HTML_CONTENT = """
                             body: formData
                         });
                         const data = await response.json();
+                        
+                        if (data.error) {
+                            updateStatus('Error: ' + data.error);
+                            return;
+                        }
                         
                         // Add the transcription to the conversation
                         addMessage(data.transcription, 'candidate');
@@ -212,7 +247,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(HTML_CONTENT.encode())
         else:
-            super().do_GET(self)
+            super().do_GET()
 
 def run_server():
     PORT = 8080
