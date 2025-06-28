@@ -71,6 +71,14 @@ HTML_CONTENT = """
             background-color: #6c757d;
             color: white;
         }
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
         .btn-sm {
             padding: 4px 8px;
             font-size: 12px;
@@ -174,6 +182,39 @@ HTML_CONTENT = """
             border-radius: 4px;
             background: #f9f9f9;
         }
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        #videoPreview {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: #000;
+        }
+        .video-controls {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        .recording-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #dc3545;
+            margin-right: 8px;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
         select, input {
             padding: 8px;
             margin: 5px;
@@ -203,12 +244,30 @@ HTML_CONTENT = """
             <div class="session-info" id="sessionInfo" style="display: none;">
                 <strong>Session ID:</strong> <span id="sessionId"></span>
             </div>
-            <div class="status" id="status">Connecting to server...</div>
+            <div class="status" id="status">Connecting to server... Auto-recording will start when interview begins.</div>
+            
+            <!-- Video Preview Section -->
+            <div class="video-container">
+                <video id="videoPreview" autoplay muted playsinline></video>
+                <div class="video-controls">
+                    <label>
+                        <input type="checkbox" id="enableVideo" checked> Enable Video Recording
+                    </label>
+                    <label>
+                        <input type="checkbox" id="enableAudio" checked> Enable Audio Recording
+                    </label>
+                </div>
+            </div>
+            
             <div class="conversation" id="conversation"></div>
             <div class="controls">
-                <button id="startRecording">Start Recording</button>
-                <button id="stopRecording" disabled>Stop Recording</button>
-                <button id="testSpeech" onclick="testSpeech()">Test Speech</button>
+                <button id="toggleAutoRecording" class="btn btn-success" onclick="toggleAutoRecording()">Disable Auto-Recording</button>
+                <button id="startRecording" class="btn btn-primary">
+                    <span class="recording-indicator" style="display: none;"></span>
+                    Start Recording (Manual)
+                </button>
+                <button id="stopRecording" class="btn btn-danger" disabled>Restart Recording</button>
+                <button id="testSpeech" onclick="testSpeech()" class="btn btn-secondary">Test Speech</button>
                 <button id="finishInterview" class="btn btn-success" onclick="finishInterview()">Finish</button>
             </div>
             <div class="control-group">
@@ -234,10 +293,23 @@ HTML_CONTENT = """
 
     <script>
         let mediaRecorder;
+        let audioRecorder;
+        let videoRecorder;
         let audioChunks = [];
+        let videoChunks = [];
         let ws;
         let isConnected = false;
         let currentSessionId = null;
+        let mediaStream = null;
+        let isRecording = false;
+        let audioContext = null;
+        let microphoneSource = null;
+        let ttsSource = null;
+        let mixedAudioDestination = null;
+        let ttsAudioQueue = [];
+        let isPlayingTTS = false;
+        let autoRecordingEnabled = true;
+        let recordingStarted = false;
 
         function showTab(tabName) {
             // Hide all tab contents
@@ -291,12 +363,14 @@ HTML_CONTENT = """
                             <div class="recording-header">
                                 <h3>${displayDate}</h3>
                                 <p>Session: ${recording.session_id}</p>
-                                <p>Files: ${recording.audio_files.length} audio, ${recording.metadata_files.length} metadata</p>
+                                <p>Files: ${recording.audio_files.length} audio, ${recording.video_files ? recording.video_files.length : 0} video, ${recording.metadata_files.length} metadata</p>
                                 ${recording.combined_audio ? `<p><strong>Combined Audio Available</strong></p>` : ''}
+                                ${recording.combined_video ? `<p><strong>Combined Video Available</strong></p>` : ''}
                             </div>
                             <div class="recording-actions">
                                 <button onclick="viewSessionDetails('${recording.session_id}')" class="btn btn-primary">View Details</button>
-                                ${recording.combined_audio ? `<button onclick="playCombinedAudio('${recording.session_id}', '${recording.combined_audio}')" class="btn btn-success">Play Combined</button>` : ''}
+                                ${recording.combined_audio ? `<button onclick="playCombinedAudio('${recording.session_id}', '${recording.combined_audio}')" class="btn btn-success">Play Combined Audio</button>` : ''}
+                                ${recording.combined_video ? `<button onclick="playCombinedVideo('${recording.session_id}', '${recording.combined_video}')" class="btn btn-success">Play Combined Video</button>` : ''}
                             </div>
                         `;
                         recordingsList.appendChild(recordingDiv);
@@ -317,6 +391,49 @@ HTML_CONTENT = """
                 console.error('Error playing audio:', error);
                 alert('Error playing audio. Please try again.');
             });
+        }
+
+        function playCombinedVideo(sessionId, filename) {
+            const videoUrl = `http://localhost:8000/recordings/${sessionId}/${filename}`;
+            const video = document.createElement('video');
+            video.src = videoUrl;
+            video.controls = true;
+            video.style.width = '100%';
+            video.style.maxWidth = '640px';
+            
+            // Create a modal or popup to show the video
+            const modal = document.createElement('div');
+            modal.style.position = 'fixed';
+            modal.style.top = '0';
+            modal.style.left = '0';
+            modal.style.width = '100%';
+            modal.style.height = '100%';
+            modal.style.backgroundColor = 'rgba(0,0,0,0.8)';
+            modal.style.display = 'flex';
+            modal.style.justifyContent = 'center';
+            modal.style.alignItems = 'center';
+            modal.style.zIndex = '1000';
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = 'Close';
+            closeBtn.style.position = 'absolute';
+            closeBtn.style.top = '20px';
+            closeBtn.style.right = '20px';
+            closeBtn.style.padding = '10px 20px';
+            closeBtn.style.backgroundColor = '#dc3545';
+            closeBtn.style.color = 'white';
+            closeBtn.style.border = 'none';
+            closeBtn.style.borderRadius = '4px';
+            closeBtn.style.cursor = 'pointer';
+            
+            closeBtn.onclick = () => document.body.removeChild(modal);
+            modal.onclick = (e) => {
+                if (e.target === modal) document.body.removeChild(modal);
+            };
+            
+            modal.appendChild(video);
+            modal.appendChild(closeBtn);
+            document.body.appendChild(modal);
         }
 
         async function viewSessionDetails(sessionId) {
@@ -359,12 +476,32 @@ HTML_CONTENT = """
                             `).join('') : '<p>No candidate audio files</p>'
                         }
                     </div>
+                    ${data.video_files && data.video_files.length > 0 ? `
+                        <div class="audio-section">
+                            <h3>Video Files</h3>
+                            ${data.video_files.map(file => `
+                                <div class="audio-item">
+                                    <span>${file}</span>
+                                    <button onclick="playVideo('${sessionId}', '${file.replace(/'/g, "\\'")}')" class="btn btn-sm btn-primary">Play</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
                     ${data.combined_audio ? `
                         <div class="audio-section">
                             <h3>Combined Audio</h3>
                             <div class="audio-item">
                                 <span>${data.combined_audio}</span>
                                 <button onclick="playAudio('${sessionId}', '${data.combined_audio.replace(/'/g, "\\'")}')" class="btn btn-sm btn-success">Play Combined</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                    ${data.combined_video ? `
+                        <div class="audio-section">
+                            <h3>Combined Video</h3>
+                            <div class="audio-item">
+                                <span>${data.combined_video}</span>
+                                <button onclick="playVideo('${sessionId}', '${data.combined_video.replace(/'/g, "\\'")}')" class="btn btn-sm btn-success">Play Combined</button>
                             </div>
                         </div>
                     ` : ''}
@@ -403,6 +540,55 @@ HTML_CONTENT = """
                 console.error('Error playing audio:', error);
                 alert('Error playing audio. Please try again.');
             });
+        }
+
+        function playVideo(sessionId, filename) {
+            if (!filename || filename === 'undefined') {
+                console.error('Invalid filename:', filename);
+                alert('Invalid video file');
+                return;
+            }
+            
+            const videoUrl = `http://localhost:8000/recordings/${sessionId}/${encodeURIComponent(filename)}`;
+            const video = document.createElement('video');
+            video.src = videoUrl;
+            video.controls = true;
+            video.style.width = '100%';
+            video.style.maxWidth = '640px';
+            
+            // Create a modal or popup to show the video
+            const modal = document.createElement('div');
+            modal.style.position = 'fixed';
+            modal.style.top = '0';
+            modal.style.left = '0';
+            modal.style.width = '100%';
+            modal.style.height = '100%';
+            modal.style.backgroundColor = 'rgba(0,0,0,0.8)';
+            modal.style.display = 'flex';
+            modal.style.justifyContent = 'center';
+            modal.style.alignItems = 'center';
+            modal.style.zIndex = '1000';
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = 'Close';
+            closeBtn.style.position = 'absolute';
+            closeBtn.style.top = '20px';
+            closeBtn.style.right = '20px';
+            closeBtn.style.padding = '10px 20px';
+            closeBtn.style.backgroundColor = '#dc3545';
+            closeBtn.style.color = 'white';
+            closeBtn.style.border = 'none';
+            closeBtn.style.borderRadius = '4px';
+            closeBtn.style.cursor = 'pointer';
+            
+            closeBtn.onclick = () => document.body.removeChild(modal);
+            modal.onclick = (e) => {
+                if (e.target === modal) document.body.removeChild(modal);
+            };
+            
+            modal.appendChild(video);
+            modal.appendChild(closeBtn);
+            document.body.appendChild(modal);
         }
 
         function addMessage(content, role) {
@@ -445,6 +631,11 @@ HTML_CONTENT = """
                             document.getElementById('sessionId').textContent = data.session_id;
                             document.getElementById('sessionInfo').style.display = 'block';
                         }
+                        
+                        // Auto-start recording on first greeting if not already recording
+                        if (autoRecordingEnabled && !recordingStarted && data.type === 'greeting') {
+                            await startAutoRecording();
+                        }
                     }
                 };
 
@@ -465,79 +656,239 @@ HTML_CONTENT = """
         }
 
         async function startRecording() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        sampleRate: 44100,
-                        channelCount: 1,
-                        echoCancellation: true,
-                        noiseSuppression: true
-                    }
-                });
-                
-                // Use the correct MIME type that MediaRecorder supports
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-                    ? 'audio/webm;codecs=opus' 
-                    : 'audio/webm';
-                
-                mediaRecorder = new MediaRecorder(stream, { mimeType });
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    audioChunks.push(event.data);
-                };
-
-                mediaRecorder.onstop = async () => {
-                    // Create blob with the correct MIME type
-                    const audioBlob = new Blob(audioChunks, { type: mimeType });
-                    const formData = new FormData();
-                    formData.append('file', audioBlob, 'recording.webm');
+            // Manual recording start (override for auto-recording)
+            if (autoRecordingEnabled && !recordingStarted) {
+                await startAutoRecording();
+            } else if (!autoRecordingEnabled) {
+                // Original manual recording logic
+                try {
+                    const enableVideo = document.getElementById('enableVideo').checked;
+                    const enableAudio = document.getElementById('enableAudio').checked;
                     
-                    // Add both client_id and session_id if available
-                    if (currentSessionId) {
-                        formData.append('session_id', currentSessionId);
-                        // Also send as client_id for backward compatibility
-                        formData.append('client_id', currentSessionId);
+                    if (!enableVideo && !enableAudio) {
+                        alert('Please enable at least audio or video recording.');
+                        return;
                     }
 
-                    try {
-                        const response = await fetch('http://localhost:8000/transcribe', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        const data = await response.json();
-                        
-                        // Add the transcription to the conversation
-                        addMessage(data.transcription, 'candidate');
-                        
-                        // Send the transcription to the WebSocket server
-                        if (ws && isConnected) {
-                            ws.send(JSON.stringify({
-                                transcription: data.transcription
-                            }));
-                        }
-                    } catch (error) {
-                        console.error('Error:', error);
-                        updateStatus('Error processing audio. Please try again.');
+                    // Initialize Web Audio API for mixing audio
+                    if (enableVideo) {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        mixedAudioDestination = audioContext.createMediaStreamDestination();
                     }
 
-                    audioChunks = [];
-                };
+                    const constraints = {};
+                    if (enableAudio) {
+                        constraints.audio = {
+                            sampleRate: 44100,
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true
+                        };
+                    }
+                    if (enableVideo) {
+                        constraints.video = {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                            frameRate: { ideal: 30 }
+                        };
+                    }
 
-                mediaRecorder.start();
-                document.getElementById('startRecording').disabled = true;
-                document.getElementById('stopRecording').disabled = false;
-                updateStatus('Recording...');
-            } catch (error) {
-                console.error('Error accessing microphone:', error);
-                updateStatus('Error accessing microphone. Please check permissions.');
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    
+                    // Set up video preview
+                    if (enableVideo) {
+                        const videoPreview = document.getElementById('videoPreview');
+                        videoPreview.srcObject = mediaStream;
+                    }
+                    
+                    // Create separate recorders for audio and video
+                    if (enableAudio) {
+                        const audioStream = new MediaStream(mediaStream.getAudioTracks());
+                        const audioMimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+                            ? 'audio/webm;codecs=opus' 
+                            : 'audio/webm';
+                        
+                        audioRecorder = new MediaRecorder(audioStream, { mimeType: audioMimeType });
+                        
+                        audioRecorder.ondataavailable = (event) => {
+                            audioChunks.push(event.data);
+                        };
+
+                        audioRecorder.onstop = async () => {
+                            const audioBlob = new Blob(audioChunks, { type: audioMimeType });
+                            const formData = new FormData();
+                            formData.append('file', audioBlob, 'recording.webm');
+                            
+                            if (currentSessionId) {
+                                formData.append('session_id', currentSessionId);
+                                formData.append('client_id', currentSessionId);
+                            }
+
+                            try {
+                                const response = await fetch('http://localhost:8000/transcribe', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                const data = await response.json();
+                                
+                                addMessage(data.transcription, 'candidate');
+                                
+                                if (ws && isConnected) {
+                                    ws.send(JSON.stringify({
+                                        transcription: data.transcription
+                                    }));
+                                }
+                            } catch (error) {
+                                console.error('Error:', error);
+                                updateStatus('Error processing audio. Please try again.');
+                            }
+
+                            audioChunks = [];
+                        };
+                        
+                        audioRecorder.start();
+                    }
+                    
+                    if (enableVideo) {
+                        // Set up audio mixing for video recording
+                        microphoneSource = audioContext.createMediaStreamSource(mediaStream);
+                        microphoneSource.connect(mixedAudioDestination);
+                        
+                        // Create combined stream with video and mixed audio
+                        const videoTracks = mediaStream.getVideoTracks();
+                        const mixedAudioTracks = mixedAudioDestination.stream.getAudioTracks();
+                        const combinedStream = new MediaStream([...videoTracks, ...mixedAudioTracks]);
+                        
+                        const videoMimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') 
+                            ? 'video/webm;codecs=vp9,opus' 
+                            : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+                            ? 'video/webm;codecs=vp8,opus'
+                            : 'video/webm';
+                        
+                        videoRecorder = new MediaRecorder(combinedStream, { mimeType: videoMimeType });
+                        
+                        videoRecorder.ondataavailable = (event) => {
+                            videoChunks.push(event.data);
+                        };
+
+                        videoRecorder.onstop = async () => {
+                            // Only save video when interview is finished, not on continuous recording
+                            if (!isRecording) {
+                                const videoBlob = new Blob(videoChunks, { type: videoMimeType });
+                                const formData = new FormData();
+                                formData.append('file', videoBlob, 'recording.webm');
+                                
+                                if (currentSessionId) {
+                                    formData.append('session_id', currentSessionId);
+                                    formData.append('client_id', currentSessionId);
+                                }
+
+                                try {
+                                    const response = await fetch('http://localhost:8000/save-video', {
+                                        method: 'POST',
+                                        body: formData
+                                    });
+                                    const data = await response.json();
+                                    
+                                    if (data.success) {
+                                        console.log('Video saved successfully');
+                                        updateStatus('Video saved successfully');
+                                    } else {
+                                        console.error('Error saving video:', data.error);
+                                        updateStatus('Error saving video: ' + data.error);
+                                    }
+                                } catch (error) {
+                                    console.error('Error saving video:', error);
+                                    updateStatus('Error saving video');
+                                }
+                            }
+                            
+                            videoChunks = [];
+                        };
+                        
+                        // Set timeslice to 1 second for continuous recording
+                        videoRecorder.start(1000);
+                    }
+
+                    isRecording = true;
+                    recordingStarted = true;
+                    document.getElementById('startRecording').disabled = true;
+                    document.getElementById('stopRecording').disabled = false;
+                    document.querySelector('.recording-indicator').style.display = 'inline-block';
+                    updateStatus('Recording...');
+                } catch (error) {
+                    console.error('Error accessing media devices:', error);
+                    updateStatus('Error accessing camera/microphone. Please check permissions.');
+                }
             }
         }
 
         function stopRecording() {
-            mediaRecorder.stop();
-            document.getElementById('startRecording').disabled = false;
-            document.getElementById('stopRecording').disabled = true;
-            updateStatus('Processing your response...');
+            // For continuous recording, we don't actually stop - we just pause and restart
+            if (autoRecordingEnabled && isRecording) {
+                // Restart recording for continuous mode
+                if (audioRecorder && audioRecorder.state !== 'inactive') {
+                    audioRecorder.stop(); // This will trigger onstop which restarts
+                }
+                if (videoRecorder && videoRecorder.state !== 'inactive') {
+                    videoRecorder.stop(); // This will trigger onstop which restarts
+                }
+                updateStatus('Recording restarted for continuous mode...');
+            } else {
+                // Complete stop for manual mode
+                if (audioRecorder && audioRecorder.state !== 'inactive') {
+                    audioRecorder.stop();
+                }
+                
+                if (videoRecorder && videoRecorder.state !== 'inactive') {
+                    videoRecorder.stop();
+                }
+                
+                // Stop media stream
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                }
+                
+                // Clean up audio context
+                if (audioContext) {
+                    if (microphoneSource) {
+                        microphoneSource.disconnect();
+                        microphoneSource = null;
+                    }
+                    if (ttsSource) {
+                        ttsSource.disconnect();
+                        ttsSource = null;
+                    }
+                    audioContext.close();
+                    audioContext = null;
+                }
+                
+                // Clear video preview
+                const videoPreview = document.getElementById('videoPreview');
+                videoPreview.srcObject = null;
+                
+                isRecording = false;
+                recordingStarted = false;
+                document.getElementById('startRecording').disabled = false;
+                document.getElementById('stopRecording').disabled = true;
+                document.querySelector('.recording-indicator').style.display = 'none';
+                updateStatus('Recording stopped.');
+            }
+        }
+
+        function toggleAutoRecording() {
+            autoRecordingEnabled = !autoRecordingEnabled;
+            const toggleBtn = document.getElementById('toggleAutoRecording');
+            if (autoRecordingEnabled) {
+                toggleBtn.textContent = 'Disable Auto-Recording';
+                toggleBtn.className = 'btn btn-warning';
+                updateStatus('Auto-recording enabled. Recording will start automatically when interview begins.');
+            } else {
+                toggleBtn.textContent = 'Enable Auto-Recording';
+                toggleBtn.className = 'btn btn-success';
+                updateStatus('Manual recording mode. Click "Start Recording" to begin.');
+            }
         }
 
         function speak(text) {
@@ -579,6 +930,34 @@ HTML_CONTENT = """
                 const audioUrl = URL.createObjectURL(audioBlob);
                 
                 const audio = new Audio(audioUrl);
+                
+                // If video recording is active, mix the TTS audio into the video recording
+                if (isRecording && audioContext && mixedAudioDestination) {
+                    try {
+                        // Create a new audio element for mixing
+                        const mixingAudio = new Audio(audioUrl);
+                        mixingAudio.muted = true; // Don't play through speakers
+                        
+                        // Create a media stream source from the audio element
+                        const audioStream = mixingAudio.captureStream();
+                        const ttsAudioSource = audioContext.createMediaStreamSource(audioStream);
+                        ttsAudioSource.connect(mixedAudioDestination);
+                        
+                        // Start playing the audio to capture it
+                        await mixingAudio.play();
+                        
+                        // Clean up when audio finishes
+                        mixingAudio.onended = () => {
+                            ttsAudioSource.disconnect();
+                            URL.revokeObjectURL(audioUrl);
+                        };
+                        
+                        console.log('TTS audio mixed into video recording');
+                    } catch (error) {
+                        console.error('Error mixing TTS audio:', error);
+                    }
+                }
+                
                 audio.onended = () => {
                     URL.revokeObjectURL(audioUrl);
                 };
@@ -600,110 +979,288 @@ HTML_CONTENT = """
         
         function speakWithBrowser(text) {
             if ('speechSynthesis' in window) {
-                // Cancel any ongoing speech
-                window.speechSynthesis.cancel();
-                
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'en-US';
-                utterance.rate = 0.9; // Slightly slower for clarity
+                utterance.rate = 0.9;
                 utterance.pitch = 1.0;
                 utterance.volume = 1.0;
                 
-                // Try to select a good voice
-                const voices = window.speechSynthesis.getVoices();
+                // Try to find a good voice
+                const voices = speechSynthesis.getVoices();
                 const preferredVoice = voices.find(voice => 
-                    voice.lang.startsWith('en') && 
-                    (voice.name.includes('Female') || voice.name.includes('Samantha') || voice.name.includes('Alex'))
-                );
+                    voice.lang.includes('en') && voice.name.includes('Google')
+                ) || voices.find(voice => 
+                    voice.lang.includes('en')
+                ) || voices[0];
+                
                 if (preferredVoice) {
                     utterance.voice = preferredVoice;
                 }
                 
-                utterance.onstart = () => {
-                    console.log('Speaking:', text);
-                };
-                
-                utterance.onend = () => {
-                    console.log('Finished speaking');
-                };
-                
-                utterance.onerror = (event) => {
-                    console.error('Speech synthesis error:', event);
-                };
-                
-                window.speechSynthesis.speak(utterance);
+                speechSynthesis.speak(utterance);
             } else {
                 console.error('Speech synthesis not supported');
             }
         }
 
         function testSpeech() {
-            const testText = "Hello! I'm your AI interviewer. This is a test of the OpenAI text-to-speech system.";
-            updateStatus('Testing OpenAI TTS...');
-            
-            // Get the currently selected voice from the dropdown
-            const selectedVoice = document.getElementById('voiceSelect')?.value || 'alloy';
-            
-            // Always try OpenAI TTS first for interviews
-            speakWithOpenAI(testText, selectedVoice).then(() => {
-                updateStatus('OpenAI TTS test completed successfully!');
-            }).catch((error) => {
-                console.error('OpenAI TTS test failed:', error);
-                updateStatus('OpenAI TTS failed, testing browser speech synthesis...');
-                speakWithBrowser(testText);
-            });
+            const testText = "Hello! This is a test of the speech synthesis system. How are you today?";
+            speak(testText);
         }
 
         function changeVoice() {
-            const voiceSelect = document.getElementById('voiceSelect');
-            const selectedVoice = voiceSelect.value;
-            
-            // Update the voice setting
+            const selectedVoice = document.getElementById('voiceSelect').value;
             window.openaiVoice = selectedVoice;
-            
-            // Test the new voice
-            const testText = `Voice changed to ${selectedVoice}. This is how I will sound for your interview.`;
-            updateStatus(`Testing new voice: ${selectedVoice}...`);
-            
-            speakWithOpenAI(testText, selectedVoice).then(() => {
-                updateStatus(`Voice changed to ${selectedVoice} successfully!`);
-            }).catch((error) => {
-                console.error('Voice change test failed:', error);
-                updateStatus('Voice change failed, using default voice');
-            });
+            console.log('Voice changed to:', selectedVoice);
         }
 
         async function finishInterview() {
-            if (!currentSessionId) {
-                alert('No active session to finish.');
-                return;
-            }
-            try {
-                updateStatus('Finishing interview and combining audio...');
-                const response = await fetch('http://localhost:8000/finish-session', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: currentSessionId })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    updateStatus('Interview finished! Combined audio is ready.');
-                    alert('Interview finished! Combined audio is ready.');
-                } else {
-                    updateStatus('Failed to finish interview: ' + (data.error || 'Unknown error'));
-                    alert('Failed to finish interview: ' + (data.error || 'Unknown error'));
+            // Stop all recording completely when finishing
+            if (isRecording) {
+                // Force complete stop for finish
+                if (audioRecorder && audioRecorder.state !== 'inactive') {
+                    audioRecorder.stop();
                 }
-            } catch (error) {
-                updateStatus('Error finishing interview.');
-                alert('Error finishing interview.');
+                if (videoRecorder && videoRecorder.state !== 'inactive') {
+                    videoRecorder.stop();
+                }
+                
+                // Stop media stream
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                }
+                
+                // Clean up audio context
+                if (audioContext) {
+                    if (microphoneSource) {
+                        microphoneSource.disconnect();
+                        microphoneSource = null;
+                    }
+                    if (ttsSource) {
+                        ttsSource.disconnect();
+                        ttsSource = null;
+                    }
+                    audioContext.close();
+                    audioContext = null;
+                }
+                
+                // Clear video preview
+                const videoPreview = document.getElementById('videoPreview');
+                videoPreview.srcObject = null;
+                
+                isRecording = false;
+                recordingStarted = false;
+                document.getElementById('startRecording').disabled = false;
+                document.getElementById('stopRecording').disabled = true;
+                document.querySelector('.recording-indicator').style.display = 'none';
+            }
+            
+            if (currentSessionId) {
+                try {
+                    const response = await fetch('http://localhost:8000/finish-session', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            session_id: currentSessionId
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        updateStatus('Interview finished. Audio and video files have been combined.');
+                        addMessage('Interview completed successfully!', 'system');
+                    } else {
+                        updateStatus('Error finishing interview: ' + data.error);
+                    }
+                } catch (error) {
+                    console.error('Error finishing interview:', error);
+                    updateStatus('Error finishing interview. Please try again.');
+                }
+            } else {
+                updateStatus('No active session to finish.');
             }
         }
 
-        document.getElementById('startRecording').addEventListener('click', startRecording);
-        document.getElementById('stopRecording').addEventListener('click', stopRecording);
+        async function startAutoRecording() {
+            try {
+                const enableVideo = document.getElementById('enableVideo').checked;
+                const enableAudio = document.getElementById('enableAudio').checked;
+                
+                if (!enableVideo && !enableAudio) {
+                    console.log('No recording enabled, skipping auto-recording');
+                    return;
+                }
 
-        // Initialize
-        connectWebSocket();
+                console.log('Starting automatic recording...');
+
+                // Initialize Web Audio API for mixing audio
+                if (enableVideo) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    mixedAudioDestination = audioContext.createMediaStreamDestination();
+                }
+
+                const constraints = {};
+                if (enableAudio) {
+                    constraints.audio = {
+                        sampleRate: 44100,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    };
+                }
+                if (enableVideo) {
+                    constraints.video = {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30 }
+                    };
+                }
+
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                // Set up video preview
+                if (enableVideo) {
+                    const videoPreview = document.getElementById('videoPreview');
+                    videoPreview.srcObject = mediaStream;
+                }
+                
+                // Create separate recorders for audio and video
+                if (enableAudio) {
+                    const audioStream = new MediaStream(mediaStream.getAudioTracks());
+                    const audioMimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+                        ? 'audio/webm;codecs=opus' 
+                        : 'audio/webm';
+                    
+                    audioRecorder = new MediaRecorder(audioStream, { mimeType: audioMimeType });
+                    
+                    audioRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    audioRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: audioMimeType });
+                        const formData = new FormData();
+                        formData.append('file', audioBlob, 'recording.webm');
+                        
+                        if (currentSessionId) {
+                            formData.append('session_id', currentSessionId);
+                            formData.append('client_id', currentSessionId);
+                        }
+
+                        try {
+                            const response = await fetch('http://localhost:8000/transcribe', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            const data = await response.json();
+                            
+                            addMessage(data.transcription, 'candidate');
+                            
+                            if (ws && isConnected) {
+                                ws.send(JSON.stringify({
+                                    transcription: data.transcription
+                                }));
+                            }
+                        } catch (error) {
+                            console.error('Error:', error);
+                            updateStatus('Error processing audio. Please try again.');
+                        }
+
+                        audioChunks = [];
+                        
+                        // Restart audio recording immediately for continuous recording
+                        if (isRecording && audioRecorder) {
+                            audioRecorder.start();
+                        }
+                    };
+                    
+                    audioRecorder.start();
+                }
+                
+                if (enableVideo) {
+                    // Set up audio mixing for video recording
+                    microphoneSource = audioContext.createMediaStreamSource(mediaStream);
+                    microphoneSource.connect(mixedAudioDestination);
+                    
+                    // Create combined stream with video and mixed audio
+                    const videoTracks = mediaStream.getVideoTracks();
+                    const mixedAudioTracks = mixedAudioDestination.stream.getAudioTracks();
+                    const combinedStream = new MediaStream([...videoTracks, ...mixedAudioTracks]);
+                    
+                    const videoMimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') 
+                        ? 'video/webm;codecs=vp9,opus' 
+                        : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+                        ? 'video/webm;codecs=vp8,opus'
+                        : 'video/webm';
+                    
+                    videoRecorder = new MediaRecorder(combinedStream, { mimeType: videoMimeType });
+                    
+                    videoRecorder.ondataavailable = (event) => {
+                        videoChunks.push(event.data);
+                    };
+
+                    videoRecorder.onstop = async () => {
+                        // Only save video when interview is finished, not on continuous recording
+                        if (!isRecording) {
+                            const videoBlob = new Blob(videoChunks, { type: videoMimeType });
+                            const formData = new FormData();
+                            formData.append('file', videoBlob, 'recording.webm');
+                            
+                            if (currentSessionId) {
+                                formData.append('session_id', currentSessionId);
+                                formData.append('client_id', currentSessionId);
+                            }
+
+                            try {
+                                const response = await fetch('http://localhost:8000/save-video', {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                const data = await response.json();
+                                
+                                if (data.success) {
+                                    console.log('Video saved successfully');
+                                    updateStatus('Video saved successfully');
+                                } else {
+                                    console.error('Error saving video:', data.error);
+                                    updateStatus('Error saving video: ' + data.error);
+                                }
+                            } catch (error) {
+                                console.error('Error saving video:', error);
+                                updateStatus('Error saving video');
+                            }
+                        }
+                        
+                        videoChunks = [];
+                    };
+                    
+                    // Set timeslice to 1 second for continuous recording
+                    videoRecorder.start(1000);
+                }
+
+                isRecording = true;
+                recordingStarted = true;
+                document.getElementById('startRecording').disabled = true;
+                document.getElementById('stopRecording').disabled = false;
+                document.querySelector('.recording-indicator').style.display = 'inline-block';
+                updateStatus('Recording automatically started...');
+                console.log('Automatic recording started successfully');
+            } catch (error) {
+                console.error('Error starting automatic recording:', error);
+                updateStatus('Error starting automatic recording. Please check permissions.');
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            connectWebSocket();
+            
+            // Set up recording button event listeners
+            document.getElementById('startRecording').addEventListener('click', startRecording);
+            document.getElementById('stopRecording').addEventListener('click', stopRecording);
+        });
     </script>
 </body>
 </html>

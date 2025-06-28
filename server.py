@@ -198,55 +198,42 @@ def convert_to_mp3(input_path: str, output_path: str):
 
 def combine_audio_files(session_dir: Path, output_filename: str = None):
     """Combine all audio files in a session directory into a single MP3 file"""
-    if output_filename is None:
-        output_filename = COMBINED_AUDIO_FILENAME
-    
     try:
-        # Check if ffmpeg is available
-        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
-        if result.returncode != 0:
-            print("Warning: ffmpeg not found. Audio combining skipped.")
-            return False
+        if not output_filename:
+            output_filename = "combined_interview.mp3"
         
-        # Get all audio files in the session directory
+        output_path = session_dir / output_filename
+        
+        # Find all audio files in the session directory
         audio_files = []
-        for file in session_dir.iterdir():
-            if file.suffix.lower() in ['.mp3', '.wav', '.webm', '.m4a']:
-                # Skip the combined file if it already exists
-                if file.name == output_filename:
-                    continue
-                # Use just the filename, not the full path
-                audio_files.append(file.name)
+        for file in session_dir.glob("*.mp3"):
+            if file.name != output_filename:  # Exclude the output file itself
+                audio_files.append(file)
         
-        if len(audio_files) == 0:
+        # Sort files by creation time to maintain chronological order
+        audio_files.sort(key=lambda x: x.stat().st_ctime)
+        
+        if not audio_files:
             print(f"No audio files found in {session_dir}")
             return False
-        
-        print(f"Found {len(audio_files)} audio files to combine: {audio_files}")
         
         # Create a file list for ffmpeg concat
         file_list_path = session_dir / "file_list.txt"
         with open(file_list_path, 'w') as f:
             for audio_file in audio_files:
-                # Use just the filename in the file list
-                f.write(f"file '{audio_file}'\n")
+                f.write(f"file '{audio_file.name}'\n")
         
-        # Run ffmpeg from the session directory
-        output_path = session_dir / output_filename
+        # Use ffmpeg to concatenate audio files
         cmd = [
-            'ffmpeg', '-f', 'concat', '-safe', '0', 
-            '-i', 'file_list.txt', '-c', 'copy', '-y', output_filename
+            'ffmpeg', '-f', 'concat', '-safe', '0',
+            '-i', str(file_list_path),
+            '-c', 'copy', '-y', str(output_path)
         ]
         
+        print(f"Found {len(audio_files)} audio files to combine: {[f.name for f in audio_files]}")
         print(f"Running ffmpeg command from {session_dir}: {' '.join(cmd)}")
         
-        # Change to the session directory and run ffmpeg
-        result = subprocess.run(
-            cmd, 
-            cwd=session_dir,
-            capture_output=True, 
-            text=True
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=session_dir)
         
         # Clean up the file list
         file_list_path.unlink(missing_ok=True)
@@ -260,6 +247,62 @@ def combine_audio_files(session_dir: Path, output_filename: str = None):
             
     except Exception as e:
         print(f"Error combining audio files: {e}")
+        return False
+
+def combine_video_files(session_dir: Path, output_filename: str = None):
+    """Combine all video files in a session directory into a single MP4 file"""
+    try:
+        if not output_filename:
+            output_filename = "combined_interview.mp4"
+        
+        output_path = session_dir / output_filename
+        
+        # Find all video files in the session directory
+        video_files = []
+        for file in session_dir.glob("*.mp4"):
+            if file.name != output_filename:  # Exclude the output file itself
+                video_files.append(file)
+        for file in session_dir.glob("*.webm"):
+            if file.name != output_filename:  # Exclude the output file itself
+                video_files.append(file)
+        
+        # Sort files by creation time to maintain chronological order
+        video_files.sort(key=lambda x: x.stat().st_ctime)
+        
+        if not video_files:
+            print(f"No video files found in {session_dir}")
+            return False
+        
+        # Create a file list for ffmpeg concat
+        file_list_path = session_dir / "video_file_list.txt"
+        with open(file_list_path, 'w') as f:
+            for video_file in video_files:
+                f.write(f"file '{video_file.name}'\n")
+        
+        # Use ffmpeg to concatenate video files
+        cmd = [
+            'ffmpeg', '-f', 'concat', '-safe', '0',
+            '-i', str(file_list_path),
+            '-c', 'copy', '-y', str(output_path)
+        ]
+        
+        print(f"Found {len(video_files)} video files to combine: {[f.name for f in video_files]}")
+        print(f"Running ffmpeg command from {session_dir}: {' '.join(cmd)}")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=session_dir)
+        
+        # Clean up the file list
+        file_list_path.unlink(missing_ok=True)
+        
+        if result.returncode == 0:
+            print(f"Successfully combined video files into {output_path}")
+            return True
+        else:
+            print(f"Error combining video files: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        print(f"Error combining video files: {e}")
         return False
 
 def generate_follow_up(question_type, response):
@@ -472,7 +515,8 @@ def create_session_info(client_id: str):
         "start_time": datetime.now().isoformat(),
         "current_question": "introduction",
         "response_count": 0,
-        "audio_files": []
+        "audio_files": [],
+        "video_files": []
     }
 
 @app.websocket("/ws")
@@ -696,10 +740,12 @@ async def list_recordings():
             session_info = {
                 "session_id": session_dir.name,
                 "audio_files": [],
+                "video_files": [],
                 "metadata_files": [],
                 "interviewer_files": [],
                 "candidate_files": [],
-                "combined_audio": None
+                "combined_audio": None,
+                "combined_video": None
             }
             
             for file_path in session_dir.iterdir():
@@ -714,6 +760,11 @@ async def list_recordings():
                 elif file_path.suffix == ".wav":
                     session_info["candidate_files"].append(file_path.name)
                     session_info["audio_files"].append(file_path.name)
+                elif file_path.suffix in [".mp4", ".webm"]:
+                    if file_path.name == "combined_interview.mp4":
+                        session_info["combined_video"] = file_path.name
+                    else:
+                        session_info["video_files"].append(file_path.name)
                 elif file_path.suffix == ".json":
                     session_info["metadata_files"].append(file_path.name)
             
@@ -729,10 +780,12 @@ async def get_session_recordings(session_id: str):
         return {"error": "Session not found"}
     
     audio_files = []
+    video_files = []
     metadata_files = []
     interviewer_files = []
     candidate_files = []
     combined_audio = None
+    combined_video = None
     
     for file in session_dir.iterdir():
         if file.suffix == '.mp3':
@@ -746,16 +799,23 @@ async def get_session_recordings(session_id: str):
         elif file.suffix == '.wav':
             candidate_files.append(file.name)
             audio_files.append(file.name)
+        elif file.suffix in ['.mp4', '.webm']:
+            if file.name == "combined_interview.mp4":
+                combined_video = file.name
+            else:
+                video_files.append(file.name)
         elif file.suffix == '.json':
             metadata_files.append(file.name)
     
     return {
         "session_id": session_id,
         "audio_files": sorted(audio_files),
+        "video_files": sorted(video_files),
         "metadata_files": sorted(metadata_files),
         "interviewer_files": sorted(interviewer_files),
         "candidate_files": sorted(candidate_files),
-        "combined_audio": combined_audio
+        "combined_audio": combined_audio,
+        "combined_video": combined_video
     }
 
 @app.get("/interview-questions")
@@ -844,35 +904,32 @@ async def text_to_speech(text: str = Form(...), voice: str = Form(None), session
 
 @app.get("/recordings/{session_id}/{filename}")
 async def serve_audio_file(session_id: str, filename: str):
-    """Serve audio files from recordings directory"""
+    """Serve audio/video files from recordings directory"""
     file_path = RECORDINGS_DIR / session_id / filename
     
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     
     # Determine content type based on file extension
-    content_type = "audio/mpeg"  # Default for MP3
-    if filename.endswith('.wav'):
+    content_type = "audio/mpeg"  # Default
+    if filename.endswith(".mp3"):
+        content_type = "audio/mpeg"
+    elif filename.endswith(".wav"):
         content_type = "audio/wav"
-    elif filename.endswith('.webm'):
-        content_type = "audio/webm"
-    elif filename.endswith('.m4a'):
-        content_type = "audio/mp4"
+    elif filename.endswith(".mp4"):
+        content_type = "video/mp4"
+    elif filename.endswith(".webm"):
+        content_type = "video/webm"
     
-    try:
-        with open(file_path, "rb") as f:
-            content = f.read()
-        
-        return Response(
-            content=content,
-            media_type=content_type,
-            headers={
-                "Content-Disposition": f"inline; filename={filename}",
-                "Accept-Ranges": "bytes"
-            }
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+    # Read and return the file
+    with open(file_path, "rb") as f:
+        content = f.read()
+    
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @app.post("/finish-session")
 async def finish_session(request: Request):
@@ -884,13 +941,124 @@ async def finish_session(request: Request):
     if not session_dir.exists():
         return {"success": False, "error": f"Session directory not found: {session_dir}"}
     try:
-        result = combine_audio_files(session_dir)
-        if result:
-            return {"success": True}
+        # Combine audio files
+        audio_result = combine_audio_files(session_dir)
+        
+        # Combine video files
+        video_result = combine_video_files(session_dir)
+        
+        if audio_result or video_result:
+            return {"success": True, "audio_combined": audio_result, "video_combined": video_result}
         else:
-            return {"success": False, "error": "Audio combining failed"}
+            return {"success": False, "error": "No files to combine"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@app.post("/save-video")
+async def save_video(file: UploadFile = File(...), client_id: str = Form(None), session_id: str = Form(None)):
+    """Save video file for a session"""
+    try:
+        # Check file size (50MB limit for video)
+        content = await file.read()
+        if len(content) > 50 * 1024 * 1024:  # 50MB
+            return {"error": "Video file too large (max 50MB)"}
+        
+        # Determine target session
+        target_session = None
+        target_client_id = None
+        
+        if session_id:
+            # Look for session by session_id
+            for client_key, session_info in interview_sessions.items():
+                if session_info.get("session_id") == session_id:
+                    target_session = session_info
+                    target_client_id = client_key
+                    break
+        elif client_id:
+            # Look for session by client_id
+            if client_id in interview_sessions:
+                target_session = interview_sessions[client_id]
+                target_client_id = client_id
+            else:
+                # Try to find by session_id if client_id looks like a session_id
+                for client_key, session_info in interview_sessions.items():
+                    if session_info.get("session_id") == client_id:
+                        target_session = session_info
+                        target_client_id = client_key
+                        break
+        
+        # If no session found, create a new one
+        if not target_session:
+            if session_id:
+                # Use the provided session_id to create a new session
+                target_client_id = f"video_session_{int(datetime.now().timestamp())}"
+                target_session = {
+                    "session_id": session_id,
+                    "start_time": datetime.now().isoformat(),
+                    "current_question": "video_recording",
+                    "response_count": 0,
+                    "audio_files": [],
+                    "video_files": []
+                }
+                interview_sessions[target_client_id] = target_session
+            else:
+                # Create a completely new session
+                target_client_id = f"video_session_{int(datetime.now().timestamp())}"
+                target_session = create_session_info(target_client_id)
+                interview_sessions[target_client_id] = target_session
+        
+        # Create session directory
+        session_dir = RECORDINGS_DIR / target_session["session_id"]
+        session_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate timestamp for the video file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Determine file extension
+        content_type = file.content_type
+        if content_type == "video/webm":
+            file_extension = "webm"
+        elif content_type == "video/mp4":
+            file_extension = "mp4"
+        else:
+            file_extension = "webm"  # Default to webm
+        
+        # Generate filename
+        video_filename = f"response_{timestamp}.{file_extension}"
+        video_path = session_dir / video_filename
+        
+        # Save video file
+        with open(video_path, "wb") as f:
+            f.write(content)
+        
+        # Save metadata
+        metadata = {
+            "type": "candidate_video",
+            "timestamp": timestamp,
+            "filename": video_filename,
+            "content_type": content_type,
+            "file_size": len(content),
+            "session_id": target_session["session_id"]
+        }
+        
+        metadata_filename = f"metadata_{timestamp}.json"
+        metadata_path = session_dir / metadata_filename
+        
+        async with aiofiles.open(metadata_path, 'w') as f:
+            await f.write(json.dumps(metadata, indent=2))
+        
+        # Add to session info
+        if "video_files" not in target_session:
+            target_session["video_files"] = []
+        target_session["video_files"].append(metadata)
+        
+        print(f"Video saved successfully for session: {target_session['session_id']}")
+        
+        return {"success": True, "filename": video_filename, "session_id": target_session["session_id"]}
+        
+    except Exception as e:
+        print(f"Error saving video: {e}")
+        return {"error": f"Failed to save video: {str(e)}"}
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host=HOST, port=PORT, reload=DEBUG)
