@@ -1,9 +1,0 @@
-{
-  "type": "interviewer_speech",
-  "timestamp": "20250627_210107",
-  "text": "Hello and welcome! I understand you're applying for a software engineering position. Can you tell me about a challenging project you've worked on and how you overcame obstacles to deliver results?",
-  "voice": "alloy",
-  "model": "tts-1",
-  "filename": "interviewer_20250627_210107.mp3",
-  "file_size": 232320
-}

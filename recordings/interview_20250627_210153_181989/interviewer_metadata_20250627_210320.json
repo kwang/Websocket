@@ -1,9 +1,0 @@
-{
-  "type": "interviewer_speech",
-  "timestamp": "20250627_210320",
-  "text": "Hello and welcome! I understand you're here for a job interview. Could you please introduce yourself and highlight your relevant experience for this role?",
-  "voice": "alloy",
-  "model": "tts-1",
-  "filename": "interviewer_20250627_210320.mp3",
-  "file_size": 194400
-}
