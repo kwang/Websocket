@@ -38,6 +38,103 @@ if OPENAI_API_KEY:
 else:
     print("⚠️  OpenAI API key not found. Using fallback interview questions.")
 
+# Store active connections and their conversation states
+active_connections = {}
+conversation_history = {}
+interview_sessions = {}
+
+# Interview questions and follow-up prompts
+INTERVIEW_QUESTIONS = {
+    "introduction": {
+        "question": "Hello! I'm your AI interviewer today. Could you please introduce yourself?",
+        "follow_ups": [
+            "What was your most challenging project?",
+            "How did you handle difficult situations in your previous roles?",
+            "What skills did you develop from these experiences?"
+        ]
+    },
+    "experience": {
+        "question": "Could you tell me about your relevant experience?",
+        "follow_ups": [
+            "What was your most challenging project?",
+            "How did you handle difficult situations in your previous roles?",
+            "What skills did you develop from these experiences?"
+        ]
+    },
+    "skills": {
+        "question": "What are your key technical skills?",
+        "follow_ups": [
+            "How do you stay updated with new technologies?",
+            "Can you give an example of how you applied these skills?",
+            "What areas are you looking to improve?"
+        ]
+    },
+    "problem_solving": {
+        "question": "How do you approach problem-solving in your work?",
+        "follow_ups": [
+            "Can you share a specific example?",
+            "What was the outcome?",
+            "What did you learn from that experience?"
+        ]
+    },
+    "future": {
+        "question": "Where do you see yourself in the next 5 years?",
+        "follow_ups": [
+            "What steps are you taking to achieve these goals?",
+            "How does this role align with your career path?",
+            "What are you most excited about in your career?"
+        ]
+    }
+}
+
+async def generate_openai_response(conversation_history: list, candidate_response: str = None):
+    """Generate interview response using OpenAI Chat API"""
+    if not OPENAI_API_KEY:
+        return None
+    
+    try:
+        # Build the conversation context
+        messages = [
+            {
+                "role": "system",
+                "content": """You are a professional AI interviewer conducting a job interview. Your role is to:
+1. Ask relevant, contextual questions based on the candidate's responses
+2. Provide natural, conversational follow-up questions
+3. Keep responses concise (1-2 sentences)
+4. Be professional but friendly
+5. Adapt your questions based on the candidate's background and responses
+6. Focus on understanding the candidate's experience, skills, and fit for the role
+
+Start with an introduction if this is the first interaction."""
+            }
+        ]
+        
+        # Add conversation history
+        for msg in conversation_history:
+            if msg["role"] == "interviewer":
+                messages.append({"role": "assistant", "content": msg["content"]})
+            elif msg["role"] == "candidate":
+                messages.append({"role": "user", "content": msg["content"]})
+        
+        # Add current candidate response if provided
+        if candidate_response:
+            messages.append({"role": "user", "content": candidate_response})
+        
+        # Generate response using new OpenAI API format
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=messages,
+            max_tokens=OPENAI_MAX_TOKENS,
+            temperature=OPENAI_TEMPERATURE
+        )
+        
+        return response.choices[0].message.content.strip()
+    
+    except Exception as e:
+        print(f"Error generating OpenAI response: {e}")
+        return None
+
 def convert_webm_to_wav(input_path: str, output_path: str):
     """Convert WebM audio to WAV format using ffmpeg"""
     try:
@@ -158,118 +255,161 @@ def combine_audio_files(session_dir: Path, output_filename: str = None):
         print(f"Error during audio combining: {e}")
         return False
 
-# Store active connections and their conversation states
-active_connections = {}
-conversation_history = {}
-interview_sessions = {}
-
-# Interview questions and follow-up prompts
-INTERVIEW_QUESTIONS = {
-    "introduction": {
-        "question": "Hello! I'm your AI interviewer today. Could you please introduce yourself?",
-        "follow_ups": [
-            "That's interesting! Could you tell me more about your background?",
-            "What made you interested in this field?",
-            "What are your main career goals?"
-        ]
-    },
-    "experience": {
-        "question": "Could you tell me about your relevant experience?",
-        "follow_ups": [
-            "What was your most challenging project?",
-            "How did you handle difficult situations in your previous roles?",
-            "What skills did you develop from these experiences?"
-        ]
-    },
-    "skills": {
-        "question": "What are your key technical skills?",
-        "follow_ups": [
-            "How do you stay updated with new technologies?",
-            "Can you give an example of how you applied these skills?",
-            "What areas are you looking to improve?"
-        ]
-    },
-    "problem_solving": {
-        "question": "How do you approach problem-solving in your work?",
-        "follow_ups": [
-            "Can you share a specific example?",
-            "What was the outcome?",
-            "What did you learn from that experience?"
-        ]
-    },
-    "future": {
-        "question": "Where do you see yourself in the next 5 years?",
-        "follow_ups": [
-            "What steps are you taking to achieve these goals?",
-            "How does this role align with your career path?",
-            "What are you most excited about in your career?"
-        ]
-    }
-}
-
-async def generate_openai_response(conversation_history: list, candidate_response: str = None):
-    """Generate interview response using OpenAI Chat API"""
-    if not OPENAI_API_KEY:
-        return None
-    
-    try:
-        # Build the conversation context
-        messages = [
-            {
-                "role": "system",
-                "content": """You are a professional AI interviewer conducting a job interview. Your role is to:
-1. Ask relevant, contextual questions based on the candidate's responses
-2. Provide natural, conversational follow-up questions
-3. Keep responses concise (1-2 sentences)
-4. Be professional but friendly
-5. Adapt your questions based on the candidate's background and responses
-6. Focus on understanding the candidate's experience, skills, and fit for the role
-
-Start with an introduction if this is the first interaction."""
-            }
-        ]
-        
-        # Add conversation history
-        for msg in conversation_history:
-            if msg["role"] == "interviewer":
-                messages.append({"role": "assistant", "content": msg["content"]})
-            elif msg["role"] == "candidate":
-                messages.append({"role": "user", "content": msg["content"]})
-        
-        # Add current candidate response if provided
-        if candidate_response:
-            messages.append({"role": "user", "content": candidate_response})
-        
-        # Generate response using new OpenAI API format
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=messages,
-            max_tokens=OPENAI_MAX_TOKENS,
-            temperature=OPENAI_TEMPERATURE
-        )
-        
-        return response.choices[0].message.content.strip()
-    
-    except Exception as e:
-        print(f"Error generating OpenAI response: {e}")
-        return None
-
 def generate_follow_up(question_type, response):
     """Generate a contextual follow-up question based on the candidate's response"""
-    follow_ups = INTERVIEW_QUESTIONS[question_type]["follow_ups"]
-    # For now, we'll just cycle through follow-ups
-    # In a real implementation, this could use NLP to generate contextual follow-ups
-    return follow_ups[0]
+    if client_id not in used_questions:
+        used_questions[client_id] = set()
+    
+    # Generate a summary of the response
+    try:
+        # Check cache for similar responses
+        cache_key = f"summary_{response[:100]}"  # Use first 100 chars as key
+        cached = get_cached_response(cache_key)
+        if cached:
+            summary = cached
+        else:
+            summary_response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": """You are a friendly and professional AI interviewer. Summarize what the person said in one sentence, using 'You' instead of 'The candidate'. 
+                    Make your summary:
+                    1. Brief and to the point
+                    2. Focus on key points only
+                    3. Use natural language
+                    Keep it to one sentence."""},
+                    {"role": "user", "content": f"Person's response: {response}\nProvide a brief summary."}
+                ],
+                temperature=0.7,
+                max_tokens=50
+            )
+            summary = summary_response.choices[0].message.content
+            cache_response(cache_key, summary)
+    except Exception as e:
+        print(f"Error generating summary: {e}")
+        summary = "Thanks for sharing that."
+    
+    # Check for various ways the user might ask to move to the next question
+    skip_phrases = [
+        "next question",
+        "move on",
+        "let's move on",
+        "next topic",
+        "different question",
+        "don't ask that again",
+        "stop asking",
+        "change the question",
+        "ask something else"
+    ]
+    
+    if any(phrase in response.lower() for phrase in skip_phrases):
+        try:
+            # Check cache for similar questions
+            cache_key = f"next_question_{question_type}"
+            cached = get_cached_response(cache_key)
+            if cached:
+                next_question = cached
+            else:
+                system_prompt = f"""You are a friendly and professional AI interviewer. Generate a brief follow-up question about {question_type}. 
+                The question should be:
+                1. One sentence only
+                2. Clear and direct
+                3. Easy to answer
+                Keep it concise."""
+                response = client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Generate a brief follow-up question about {question_type}."}
+                    ],
+                    temperature=0.7,
+                    max_tokens=50
+                )
+                next_question = response.choices[0].message.content
+                cache_response(cache_key, next_question)
+            
+            used_questions[client_id].add(next_question)
+            current_question_types[client_id] = question_type
+            return f"{summary}\n\n{next_question}"
+        except Exception as e:
+            print(f"Error generating follow-up: {e}")
+            # Fallback to predefined questions if OpenAI fails
+            question_types = list(INTERVIEW_QUESTIONS.keys())
+            current_index = question_types.index(question_type)
+            next_type = question_types[(current_index + 1) % len(question_types)]
+            next_question = INTERVIEW_QUESTIONS[next_type]["question"]
+            used_questions[client_id].add(next_question)
+            current_question_types[client_id] = next_type
+            return f"{summary}\n\n{next_question}"
+    
+    # Check if the response is too short or unclear
+    if len(response.split()) < 10:
+        return f"{summary}\n\nCould you elaborate a bit more?"
+    
+    try:
+        # Check cache for similar follow-ups
+        cache_key = f"follow_up_{response[:100]}"  # Use first 100 chars as key
+        cached = get_cached_response(cache_key)
+        if cached:
+            follow_up = cached
+        else:
+            system_prompt = """You are a friendly and professional AI interviewer. Generate a brief follow-up question based on the candidate's response. 
+            The question should be:
+            1. One sentence only
+            2. Direct and relevant
+            3. Easy to understand
+            Keep it concise."""
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Candidate's response: {response}\nGenerate a brief follow-up question."}
+                ],
+                temperature=0.7,
+                max_tokens=50
+            )
+            follow_up = response.choices[0].message.content
+            cache_response(cache_key, follow_up)
+        
+        used_questions[client_id].add(follow_up)
+        return f"{summary}\n\n{follow_up}"
+    except Exception as e:
+        print(f"Error generating follow-up: {e}")
+        # Fallback to predefined questions if OpenAI fails
+        follow_ups = INTERVIEW_QUESTIONS[question_type]["follow_ups"]
+        available_follow_ups = [q for q in follow_ups if q not in used_questions[client_id]]
+        
+        if not available_follow_ups:
+            question_types = list(INTERVIEW_QUESTIONS.keys())
+            current_index = question_types.index(question_type)
+            next_type = question_types[(current_index + 1) % len(question_types)]
+            next_question = INTERVIEW_QUESTIONS[next_type]["question"]
+            used_questions[client_id].add(next_question)
+            current_question_types[client_id] = next_type
+            return f"{summary}\n\n{next_question}"
+        
+        follow_up = available_follow_ups[0]
+        used_questions[client_id].add(follow_up)
+        return f"{summary}\n\n{follow_up}"
 
 def analyze_response(response):
     """Analyze the candidate's response and provide feedback"""
-    # This is a simple implementation
-    # In a real system, this could use NLP to analyze response quality
-    return {
-        "feedback": "Thank you for your response.",
-        "next_question": "Let's move on to the next topic."
-    }
+    # Simple analysis based on response length and content
+    words = response.split()
+    if len(words) < 10:
+        return {
+            "feedback": "Your response was quite brief. Could you provide more details?",
+            "next_question": "Let's explore this topic further."
+        }
+    elif len(words) > 100:
+        return {
+            "feedback": "Thank you for the detailed response.",
+            "next_question": "Let's move on to another aspect."
+        }
+    else:
+        return {
+            "feedback": "Thank you for your response.",
+            "next_question": "Let's continue with our discussion."
+        }
 
 async def save_audio_file(client_id: str, audio_data: bytes, session_info: dict):
     """Save audio file with metadata"""
@@ -347,6 +487,10 @@ async def websocket_endpoint(websocket: WebSocket):
             initial_message = INTERVIEW_QUESTIONS["introduction"]["question"]
         
         # Send initial greeting
+        greeting = generate_initial_greeting()
+        used_questions[client_id].add(greeting)  # Mark initial question as used
+        audio_data = text_to_speech(greeting)
+        
         await websocket.send_json({
             "type": "greeting",
             "message": initial_message,
@@ -699,4 +843,4 @@ async def text_to_speech(text: str = Form(...), voice: str = Form(None), session
         return {"error": f"TTS generation failed: {str(e)}"}
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host=HOST, port=PORT, reload=DEBUG) 
+    uvicorn.run("server:app", host=HOST, port=PORT, reload=DEBUG)

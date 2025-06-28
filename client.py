@@ -178,25 +178,6 @@ HTML_CONTENT = """
         let audioChunks = [];
         let ws;
         let isConnected = false;
-        let currentSessionId = null;
-
-        function showTab(tabName) {
-            // Hide all tab contents
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // Show selected tab
-            document.getElementById(tabName + '-tab').classList.add('active');
-            event.target.classList.add('active');
-            
-            if (tabName === 'recordings') {
-                loadRecordings();
-            }
-        }
 
         function addMessage(content, role) {
             const conversation = document.getElementById('conversation');
@@ -211,110 +192,6 @@ HTML_CONTENT = """
             document.getElementById('status').textContent = message;
         }
 
-        async function loadRecordings() {
-            try {
-                const response = await fetch('http://localhost:8000/recordings');
-                const data = await response.json();
-                
-                const recordingsList = document.getElementById('recordingsList');
-                recordingsList.innerHTML = '';
-                
-                if (data.recordings.length === 0) {
-                    recordingsList.innerHTML = '<p>No recordings found.</p>';
-                    return;
-                }
-                
-                data.recordings.forEach(recording => {
-                    const item = document.createElement('div');
-                    item.className = 'recording-item';
-                    
-                    // Get detailed info for this session
-                    fetch(`http://localhost:8000/recordings/${recording.session_id}`)
-                        .then(response => response.json())
-                        .then(sessionData => {
-                            if (!sessionData.error) {
-                                let combinedAudioInfo = '';
-                                if (sessionData.combined_audio) {
-                                    combinedAudioInfo = `<br><strong>🎵 Combined:</strong> ${sessionData.combined_audio}`;
-                                }
-                                
-                                item.innerHTML = `
-                                    <strong>Session:</strong> ${recording.session_id}<br>
-                                    <strong>Interviewer:</strong> ${sessionData.interviewer_files.length} files<br>
-                                    <strong>Candidate:</strong> ${sessionData.candidate_files.length} files${combinedAudioInfo}<br>
-                                    <strong>Total:</strong> ${sessionData.audio_files.length + sessionData.metadata_files.length} files
-                                `;
-                            } else {
-                                item.innerHTML = `
-                                    <strong>Session:</strong> ${recording.session_id}<br>
-                                    <strong>Audio Files:</strong> ${recording.audio_files.length}<br>
-                                    <strong>Metadata Files:</strong> ${recording.metadata_files.length}
-                                `;
-                            }
-                        })
-                        .catch(() => {
-                            item.innerHTML = `
-                                <strong>Session:</strong> ${recording.session_id}<br>
-                                <strong>Audio Files:</strong> ${recording.audio_files.length}<br>
-                                <strong>Metadata Files:</strong> ${recording.metadata_files.length}
-                            `;
-                        });
-                    
-                    item.onclick = () => showSessionDetails(recording.session_id);
-                    recordingsList.appendChild(item);
-                });
-            } catch (error) {
-                console.error('Error loading recordings:', error);
-                document.getElementById('recordingsList').innerHTML = '<p>Error loading recordings.</p>';
-            }
-        }
-
-        async function showSessionDetails(sessionId) {
-            try {
-                const response = await fetch(`http://localhost:8000/recordings/${sessionId}`);
-                const data = await response.json();
-                
-                if (data.error) {
-                    alert('Session not found');
-                    return;
-                }
-                
-                let details = `<h3>Session: ${sessionId}</h3>`;
-                details += `<p><strong>Total Files:</strong> ${data.audio_files.length + data.metadata_files.length}</p>`;
-                
-                if (data.combined_audio) {
-                    details += `<h4>🎵 Combined Audio:</h4>`;
-                    details += `<p><strong>${data.combined_audio}</strong> (Complete interview)</p>`;
-                }
-                
-                if (data.interviewer_files.length > 0) {
-                    details += `<h4>Interviewer Speech (${data.interviewer_files.length} files):</h4>`;
-                    data.interviewer_files.forEach(audio => {
-                        details += `<p>🎤 ${audio}</p>`;
-                    });
-                }
-                
-                if (data.candidate_files.length > 0) {
-                    details += `<h4>Candidate Responses (${data.candidate_files.length} files):</h4>`;
-                    data.candidate_files.forEach(audio => {
-                        details += `<p>🎙️ ${audio}</p>`;
-                    });
-                }
-                
-                if (data.metadata_files.length > 0) {
-                    details += `<h4>Metadata Files (${data.metadata_files.length} files):</h4>`;
-                    data.metadata_files.forEach(meta => {
-                        details += `<p>📄 ${meta}</p>`;
-                    });
-                }
-                
-                alert(details);
-            } catch (error) {
-                console.error('Error loading session details:', error);
-                alert('Error loading session details');
-            }
-        }
-
         async function connectWebSocket() {
             try {
                 ws = new WebSocket('ws://localhost:8000/ws');
@@ -324,25 +201,10 @@ HTML_CONTENT = """
                     updateStatus('Connected to server');
                 };
                 
-                ws.onmessage = function(event) {
+                ws.onmessage = async function(event) {
                     const data = JSON.parse(event.data);
                     if (data.type === 'greeting' || data.type === 'follow_up') {
                         addMessage(data.message, 'interviewer');
-                        
-                        // Ensure voices are loaded before speaking
-                        if (window.speechSynthesis.getVoices().length === 0) {
-                            window.speechSynthesis.onvoiceschanged = () => {
-                                speak(data.message);
-                            };
-                        } else {
-                            speak(data.message);
-                        }
-                        
-                        if (data.session_id) {
-                            currentSessionId = data.session_id;
-                            document.getElementById('sessionId').textContent = data.session_id;
-                            document.getElementById('sessionInfo').style.display = 'block';
-                        }
                     }
                 };
 
@@ -403,12 +265,6 @@ HTML_CONTENT = """
                             body: formData
                         });
                         const data = await response.json();
-                        
-                        if (data.error) {
-                            console.error('Transcription error:', data.error);
-                            updateStatus('Error: ' + data.error);
-                            return;
-                        }
                         
                         // Add the transcription to the conversation
                         addMessage(data.transcription, 'candidate');
