@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_193621",
+  "text": "Hello, thank you for joining us today. Can you please introduce yourself and tell us about your experience in the software development field?",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_193621.mp3",
+  "file_size": 172320
+}

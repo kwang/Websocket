@@ -15,105 +15,35 @@ HTML_CONTENT = """
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 0 auto;
+            margin: 0;
             padding: 20px;
             background-color: #f5f5f5;
         }
         .container {
-            background-color: white;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        .conversation {
-            margin: 20px 0;
-            max-height: 400px;
-            overflow-y: auto;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .message {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 4px;
-        }
-        .interviewer {
-            background-color: #e9ecef;
-            margin-right: 20%;
-        }
-        .candidate {
-            background-color: #007bff;
-            color: white;
-            margin-left: 20%;
-        }
-        .controls {
-            margin: 20px 0;
-            display: flex;
-            gap: 10px;
-        }
-        button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            flex: 1;
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        button:hover:not(:disabled) {
-            background-color: #0056b3;
-        }
-        .status {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 4px;
-            background-color: #f8f9fa;
-        }
-        .session-info {
-            background-color: #e3f2fd;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-        }
-        .recordings-list {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 10px;
-        }
-        .recording-item {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-            cursor: pointer;
-        }
-        .recording-item:hover {
-            background-color: #f5f5f5;
-        }
-        .recording-item:last-child {
-            border-bottom: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         .tabs {
             display: flex;
+            border-bottom: 2px solid #ddd;
             margin-bottom: 20px;
         }
         .tab {
             padding: 10px 20px;
-            background-color: #f8f9fa;
-            border: 1px solid #ddd;
             cursor: pointer;
-            border-radius: 4px 4px 0 0;
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: #666;
         }
         .tab.active {
-            background-color: white;
-            border-bottom: 1px solid white;
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+            margin-bottom: -2px;
         }
         .tab-content {
             display: none;
@@ -121,16 +51,143 @@ HTML_CONTENT = """
         .tab-content.active {
             display: block;
         }
-        .control-group {
-            margin-bottom: 10px;
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 2px;
         }
-        .control-group label {
-            display: block;
-            margin-bottom: 5px;
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
         }
-        .control-group select {
-            width: 100%;
-            padding: 5px;
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        .recording-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #f9f9f9;
+        }
+        .recording-header h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .recording-header p {
+            margin: 5px 0;
+            color: #666;
+        }
+        .recording-actions {
+            margin-top: 10px;
+        }
+        .audio-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .audio-section h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        .audio-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+        .audio-item span {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+        .metadata-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .metadata-section h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        .metadata-section p {
+            margin: 5px 0;
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+        #conversation {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            background: #f9f9f9;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .message.interviewer {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+        .message.candidate {
+            background: #f3e5f5;
+            border-left: 4px solid #9c27b0;
+        }
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        .voice-controls {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        select, input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #sessionInfo {
+            display: none;
+            padding: 10px;
+            margin: 10px 0;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            color: #856404;
         }
     </style>
 </head>
@@ -178,6 +235,167 @@ HTML_CONTENT = """
         let audioChunks = [];
         let ws;
         let isConnected = false;
+        let currentSessionId = null;
+
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab content
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+            
+            // Load recordings if switching to recordings tab
+            if (tabName === 'recordings') {
+                loadRecordings();
+            }
+        }
+
+        async function loadRecordings() {
+            try {
+                const response = await fetch('http://localhost:8000/recordings');
+                const data = await response.json();
+                
+                const recordingsList = document.getElementById('recordingsList');
+                recordingsList.innerHTML = '';
+                
+                if (data.recordings && data.recordings.length > 0) {
+                    // Sort recordings by date (newest first)
+                    data.recordings.sort((a, b) => {
+                        // Extract date from session_id (format: interview_YYYYMMDD_HHMMSS_XXXXXX)
+                        const dateA = a.session_id.split('_')[1] + a.session_id.split('_')[2];
+                        const dateB = b.session_id.split('_')[1] + b.session_id.split('_')[2];
+                        return dateB.localeCompare(dateA); // Descending order
+                    });
+                    
+                    data.recordings.forEach(recording => {
+                        const recordingDiv = document.createElement('div');
+                        recordingDiv.className = 'recording-item';
+                        
+                        // Extract date from session_id for display
+                        const dateParts = recording.session_id.split('_');
+                        const dateStr = dateParts[1] + '-' + dateParts[2];
+                        const timeStr = dateParts[2];
+                        const displayDate = `${dateStr.substring(0,4)}-${dateStr.substring(4,6)}-${dateStr.substring(6,8)} ${timeStr.substring(0,2)}:${timeStr.substring(2,4)}:${timeStr.substring(4,6)}`;
+                        
+                        recordingDiv.innerHTML = `
+                            <div class="recording-header">
+                                <h3>${displayDate}</h3>
+                                <p>Session: ${recording.session_id}</p>
+                                <p>Files: ${recording.audio_files.length} audio, ${recording.metadata_files.length} metadata</p>
+                                ${recording.combined_audio ? `<p><strong>Combined Audio Available</strong></p>` : ''}
+                            </div>
+                            <div class="recording-actions">
+                                <button onclick="viewSessionDetails('${recording.session_id}')" class="btn btn-primary">View Details</button>
+                                ${recording.combined_audio ? `<button onclick="playCombinedAudio('${recording.session_id}', '${recording.combined_audio}')" class="btn btn-success">Play Combined</button>` : ''}
+                            </div>
+                        `;
+                        recordingsList.appendChild(recordingDiv);
+                    });
+                } else {
+                    recordingsList.innerHTML = '<p>No recordings found.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading recordings:', error);
+                document.getElementById('recordingsList').innerHTML = '<p>Error loading recordings.</p>';
+            }
+        }
+
+        function playCombinedAudio(sessionId, filename) {
+            const audioUrl = `http://localhost:8000/recordings/${sessionId}/${filename}`;
+            const audio = new Audio(audioUrl);
+            audio.play().catch(error => {
+                console.error('Error playing audio:', error);
+                alert('Error playing audio. Please try again.');
+            });
+        }
+
+        async function viewSessionDetails(sessionId) {
+            try {
+                const response = await fetch(`http://localhost:8000/recordings/${sessionId}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert('Error loading session details: ' + data.error);
+                    return;
+                }
+                
+                const detailsDiv = document.getElementById('sessionDetails');
+                detailsDiv.innerHTML = `
+                    <h2>Session: ${data.session_id}</h2>
+                    
+                    <div class="audio-section">
+                        <h3>Interviewer Audio Files</h3>
+                        ${data.interviewer_files.length > 0 ? 
+                            data.interviewer_files.map(file => `
+                                <div class="audio-item">
+                                    <span>${file}</span>
+                                    <button onclick="playAudio('${sessionId}', '${file.replace(/'/g, "\\'")}')" class="btn btn-sm btn-primary">Play</button>
+                                </div>
+                            `).join('') : '<p>No interviewer audio files</p>'
+                        }
+                    </div>
+                    
+                    <div class="audio-section">
+                        <h3>Candidate Audio Files</h3>
+                        ${data.candidate_files.length > 0 ? 
+                            data.candidate_files.map(file => `
+                                <div class="audio-item">
+                                    <span>${file}</span>
+                                    <button onclick="playAudio('${sessionId}', '${file.replace(/'/g, "\\'")}')" class="btn btn-sm btn-primary">Play</button>
+                                </div>
+                            `).join('') : '<p>No candidate audio files</p>'
+                        }
+                    </div>
+                    
+                    ${data.combined_audio ? `
+                        <div class="audio-section">
+                            <h3>Combined Audio</h3>
+                            <div class="audio-item">
+                                <span>${data.combined_audio}</span>
+                                <button onclick="playAudio('${sessionId}', '${data.combined_audio.replace(/'/g, "\\'")}')" class="btn btn-sm btn-success">Play Combined</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="metadata-section">
+                        <h3>Metadata Files</h3>
+                        ${data.metadata_files.length > 0 ? 
+                            data.metadata_files.map(file => `<p>${file}</p>`).join('') : '<p>No metadata files</p>'
+                        }
+                    </div>
+                    
+                    <button onclick="showTab('recordings')" class="btn btn-secondary">Back to Recordings</button>
+                `;
+                
+                showTab('sessionDetails');
+            } catch (error) {
+                console.error('Error loading session details:', error);
+                alert('Error loading session details.');
+            }
+        }
+
+        function playAudio(sessionId, filename) {
+            if (!filename || filename === 'undefined') {
+                console.error('Invalid filename:', filename);
+                alert('Invalid audio file');
+                return;
+            }
+            
+            const audioUrl = `http://localhost:8000/recordings/${sessionId}/${encodeURIComponent(filename)}`;
+            const audio = new Audio(audioUrl);
+            audio.play().catch(error => {
+                console.error('Error playing audio:', error);
+                alert('Error playing audio. Please try again.');
+            });
+        }
 
         function addMessage(content, role) {
             const conversation = document.getElementById('conversation');
@@ -186,6 +404,13 @@ HTML_CONTENT = """
             messageDiv.textContent = content;
             conversation.appendChild(messageDiv);
             conversation.scrollTop = conversation.scrollHeight;
+            
+            // Speak the message if it's from the interviewer
+            if (role === 'interviewer') {
+                // Get the currently selected voice from the dropdown
+                const selectedVoice = document.getElementById('voiceSelect')?.value || 'alloy';
+                speakWithOpenAI(content, selectedVoice);
+            }
         }
 
         function updateStatus(message) {
@@ -205,6 +430,13 @@ HTML_CONTENT = """
                     const data = JSON.parse(event.data);
                     if (data.type === 'greeting' || data.type === 'follow_up') {
                         addMessage(data.message, 'interviewer');
+                        
+                        // Capture session_id if provided
+                        if (data.session_id) {
+                            currentSessionId = data.session_id;
+                            document.getElementById('sessionId').textContent = data.session_id;
+                            document.getElementById('sessionInfo').style.display = 'block';
+                        }
                     }
                 };
 
@@ -401,8 +633,11 @@ HTML_CONTENT = """
             const testText = "Hello! I'm your AI interviewer. This is a test of the OpenAI text-to-speech system.";
             updateStatus('Testing OpenAI TTS...');
             
+            // Get the currently selected voice from the dropdown
+            const selectedVoice = document.getElementById('voiceSelect')?.value || 'alloy';
+            
             // Always try OpenAI TTS first for interviews
-            speakWithOpenAI(testText).then(() => {
+            speakWithOpenAI(testText, selectedVoice).then(() => {
                 updateStatus('OpenAI TTS test completed successfully!');
             }).catch((error) => {
                 console.error('OpenAI TTS test failed:', error);

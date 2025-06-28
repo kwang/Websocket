@@ -1,0 +1,14 @@
+{
+  "timestamp": "20250627_192727",
+  "audio_file": "response_20250627_192727.mp3",
+  "session_id": "interview_20250627_192705_960928",
+  "client_id": "1751077625.960928",
+  "interview_question": "introduction",
+  "response_number": 0,
+  "file_size_bytes": 45182,
+  "file_size_mb": 0.04,
+  "audio_format": "mp3",
+  "audio_quality": "high",
+  "whisper_model": "base",
+  "transcription": " Okay, finally it's working."
+}

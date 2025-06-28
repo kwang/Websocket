@@ -9,230 +9,268 @@ A Python-based AI interview system that conducts voice interviews, records audio
 - 💾 **Session Management**: Save and organize interview recordings
 - 🔄 **Audio Conversion**: Automatic WebM to MP3 conversion for compatibility
 - 🎵 **Combined Audio**: Automatic creation of complete interview MP3 files
-- 📊 **Recording Management**: View and manage interview sessions
+- 📊 **Recording Management**: View and manage all interview recordings
+- 🎧 **Audio Playback**: Play individual and combined audio files in browser
+- 📅 **Smart Sorting**: Recordings sorted by date (newest first)
 
-## Prerequisites
+## Features
 
-- Python 3.9+
-- ffmpeg (for audio conversion and combining)
+### 🎤 Voice Recording & Transcription
+- Record audio responses using browser microphone
+- Automatic WebM to MP3 conversion for compatibility
+- Real-time transcription using OpenAI Whisper
+- Session-based audio file organization
+
+### 🗣️ AI Voice Synthesis
+- OpenAI Text-to-Speech (TTS) integration
+- Multiple voice options (alloy, echo, fable, onyx, nova, shimmer)
+- Professional-grade AI voices for interviewer
+- Automatic interviewer speech recording
+
+### 🤖 OpenAI Chat Integration
+- Contextual interview questions based on responses
+- Intelligent follow-up questions
+- Conversation history tracking
+- Fallback to predefined questions if API unavailable
+
+### 📊 Recording Management
+- **Browser Playback**: Play audio files directly in the browser
+- **Individual Files**: Play separate interviewer and candidate audio
+- **Combined Audio**: Automatic creation of complete interview MP3
+- **Smart Organization**: Files organized by session with timestamps
+- **Metadata Storage**: JSON metadata for each recording
+- **Date Sorting**: Recordings displayed newest first
+
+### 🎵 Audio Combining
+- **Automatic Combining**: All session audio files combined into single MP3
+- **Chronological Order**: Files combined in timestamp order
+- **FFmpeg Integration**: Professional audio processing
+- **Cross-Platform**: Works on Windows, macOS, and Linux
 
 ## Installation
 
-1. **Clone the repository**:
+### Prerequisites
+- Python 3.8+
+- FFmpeg (for audio conversion and combining)
+- OpenAI API key
+
+### Setup
+
+1. **Clone the repository**
    ```bash
    git clone <repository-url>
    cd Websocket
    ```
 
-2. **Install Python dependencies**:
+2. **Install dependencies**
    ```bash
-   pip3 install -r requirements.txt
+   pip install -r requirements.txt
    ```
 
-3. **Install ffmpeg** (if not already installed):
-   ```bash
-   # macOS (using Homebrew)
-   brew install ffmpeg
-   
-   # Ubuntu/Debian
-   sudo apt update && sudo apt install ffmpeg
-   
-   # Windows (using Chocolatey)
-   choco install ffmpeg
-   ```
+3. **Install FFmpeg**
+   - **macOS**: `brew install ffmpeg`
+   - **Ubuntu/Debian**: `sudo apt install ffmpeg`
+   - **Windows**: Download from [FFmpeg website](https://ffmpeg.org/download.html)
 
-4. **Configure OpenAI API**:
+4. **Configure OpenAI API**
    ```bash
-   # Copy the example config
    cp config.example.py config.py
-   
-   # Edit config.py and add your OpenAI API key
-   # Or set environment variable:
-   export OPENAI_API_KEY="your-api-key-here"
+   ```
+   Edit `config.py` and add your OpenAI API key:
+   ```python
+   OPENAI_API_KEY = "your-api-key-here"
    ```
 
-## Quick Start
+## Usage
 
-### Option 1: Using the Service Manager (Recommended)
+### Quick Start
 
-The easiest way to start and manage the system:
-
-```bash
-# Start all services
-python3 manage_services.py start
-
-# Check status
-python3 manage_services.py status
-
-# Stop all services
-python3 manage_services.py stop
-
-# Restart services
-python3 manage_services.py restart
-
-# Clean up any stuck processes
-python3 manage_services.py clean
-```
-
-### Option 2: Manual Start
-
-1. **Start the server** (in one terminal):
+1. **Start the server**
    ```bash
    python3 server.py
    ```
 
-2. **Start the client** (in another terminal):
+2. **Start the client**
    ```bash
    python3 client.py
    ```
 
-3. **Open your browser** and go to: `http://localhost:8080`
+3. **Open your browser**
+   Navigate to `http://localhost:8080`
 
-## Usage
+### Using the Interface
 
-1. **Open the web interface** at `http://localhost:8080`
-2. **Select an AI voice** from the dropdown menu
-3. **Test the speech synthesis** by clicking "Test Speech"
-4. **Start an interview** by clicking "Start Recording"
-5. **Speak your response** when prompted
-6. **Stop recording** to process your response
-7. **View recordings** in the "Recordings" tab
+1. **Interview Tab**
+   - Select your preferred AI voice
+   - Click "Start Interview" to begin
+   - Record your responses using the microphone
+   - View real-time transcription and AI responses
 
-## Features
+2. **Recordings Tab**
+   - View all interview sessions sorted by date
+   - Click "View Details" to see individual session files
+   - Play individual audio files (interviewer/candidate)
+   - Play combined audio files (complete interview)
+   - Download audio files for offline use
 
-### Voice Recording
-- High-quality audio recording using browser MediaRecorder API
-- Automatic WebM to MP3 conversion for compatibility
-- Session-based recording organization
+3. **Voice Testing**
+   - Test different AI voices before starting
+   - Adjust voice settings as needed
 
-### AI Interview Questions
-- Contextual questions based on your responses
-- OpenAI GPT-3.5/GPT-4 integration for natural conversation
-- Fallback to predefined questions if OpenAI is unavailable
+### Audio Playback Features
 
-### Text-to-Speech
-- OpenAI TTS with 6 different AI voices (Alloy, Echo, Fable, Onyx, Nova, Shimmer)
-- Browser speech synthesis fallback
-- Voice selection and testing
+- **Individual Files**: Play separate interviewer questions and candidate responses
+- **Combined Audio**: Play complete interview as single MP3 file
+- **Browser Integration**: No external players needed
+- **Session Organization**: All files organized by interview session
+- **Metadata Access**: View detailed information about each recording
 
-### Recording Management
-- Automatic session creation and management
-- Separate storage of interviewer and candidate audio
-- Combined interview MP3 files
-- Metadata storage for each session
-- Web interface for browsing recordings
+## File Structure
+
+```
+recordings/
+├── interview_YYYYMMDD_HHMMSS_XXXXXX/
+│   ├── interviewer_YYYYMMDD_HHMMSS.mp3    # AI interviewer speech
+│   ├── response_YYYYMMDD_HHMMSS.mp3       # Candidate response
+│   ├── combined_interview.mp3             # Complete interview (auto-generated)
+│   ├── metadata_YYYYMMDD_HHMMSS.json     # Response metadata
+│   └── interviewer_metadata_YYYYMMDD_HHMMSS.json  # Interviewer metadata
+```
 
 ## Configuration
 
-Edit `config.py` to customize:
+### Server Configuration (`config.py`)
 
-- **OpenAI Settings**: API key, model, temperature, max tokens
-- **Audio Settings**: Format (MP3/WAV), quality, bitrate
-- **Server Settings**: Ports, CORS origins, file paths
-- **Whisper Settings**: Model size, language detection
+```python
+# OpenAI Settings
+OPENAI_API_KEY = "your-api-key"
+OPENAI_MODEL = "gpt-4"
+OPENAI_TTS_MODEL = "tts-1"
+OPENAI_TTS_VOICE = "alloy"
+
+# Audio Settings
+AUDIO_FORMAT = "mp3"
+CREATE_COMBINED_AUDIO = True
+COMBINED_AUDIO_FILENAME = "combined_interview.mp3"
+
+# Server Settings
+HOST = "0.0.0.0"
+PORT = 8000
+DEBUG = True
+```
+
+### Available AI Voices
+- `alloy` - Neutral, professional
+- `echo` - Warm, friendly
+- `fable` - Storytelling, engaging
+- `onyx` - Deep, authoritative
+- `nova` - Bright, energetic
+- `shimmer` - Soft, gentle
+
+## API Endpoints
+
+### Server Endpoints
+- `GET /recordings` - List all recording sessions
+- `GET /recordings/{session_id}` - Get session details
+- `GET /recordings/{session_id}/{filename}` - Serve audio files
+- `POST /transcribe` - Transcribe audio files
+- `POST /tts` - Generate speech from text
+- `WebSocket /ws` - Real-time interview communication
+
+### Audio File Access
+Audio files can be accessed directly via URL:
+```
+http://localhost:8000/recordings/{session_id}/{filename}
+```
+
+## Testing
+
+### Run System Tests
+```bash
+python3 test_system_status.py
+```
+
+### Test Audio Functionality
+```bash
+python3 test_audio_combining.py
+python3 test_combine_audio.py
+```
+
+### Test OpenAI Integration
+```bash
+python3 test_openai_integration.py
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### 1. Port Already in Use
+1. **Port Already in Use**
+   ```bash
+   python3 manage_services.py restart
+   ```
+
+2. **Audio Not Playing**
+   - Check browser permissions for audio
+   - Verify FFmpeg is installed
+   - Check audio file format compatibility
+
+3. **OpenAI API Errors**
+   - Verify API key is correct
+   - Check API quota and billing
+   - Ensure internet connection
+
+4. **Audio Combining Fails**
+   - Verify FFmpeg installation
+   - Check file permissions
+   - Ensure audio files are valid
+
+### Service Management
+
+Use the included service manager for easy control:
 ```bash
-# Check what's using the ports
-lsof -ti:8000,8080
-
-# Kill processes on those ports
-python3 manage_services.py clean
+python3 manage_services.py start    # Start services
+python3 manage_services.py stop     # Stop services
+python3 manage_services.py restart  # Restart services
+python3 manage_services.py status   # Check service status
 ```
 
-#### 2. Client do_GET Error
-This usually means there's a syntax error or import issue:
-```bash
-# Check for syntax errors
-python3 -m py_compile client.py
+## Development
 
-# Restart services
-python3 manage_services.py restart
+### Project Structure
 ```
-
-#### 3. Server Crashes with Semaphore Warnings
-This can happen with rapid restarts:
-```bash
-# Clean up and restart
-python3 manage_services.py clean
-python3 manage_services.py start
-```
-
-#### 4. OpenAI API Key Issues
-```bash
-# Check if API key is set
-echo $OPENAI_API_KEY
-
-# Or check config.py
-cat config.py | grep OPENAI_API_KEY
-```
-
-#### 5. Audio Recording Issues
-- Ensure microphone permissions are granted in browser
-- Check that ffmpeg is installed: `ffmpeg -version`
-- Try refreshing the browser page
-
-### Testing
-
-Use the provided test scripts to verify functionality:
-
-```bash
-# Test system status
-python3 test_system_status.py
-
-# Test OpenAI integration
-python3 test_openai_integration.py
-
-# Test TTS functionality
-python3 test_tts.py
-
-# Test audio conversion
-python3 test_mp3_conversion.py
-
-# Test full workflow
-python3 test_full_workflow.py
-```
-
-## Project Structure
-
-```
-├── server.py              # FastAPI backend server
-├── client.py              # Web client and HTTP server
-├── config.py              # Configuration settings
-├── config.example.py      # Example configuration
-├── requirements.txt       # Python dependencies
-├── manage_services.py     # Service management script
-├── test_system_status.py  # System status testing
-├── recordings/            # Saved interview recordings
-│   └── session_id/        # Individual session directories
-│       ├── response_*.mp3 # Candidate responses (MP3)
-│       ├── interviewer_*.mp3 # Interviewer speech (MP3)
-│       ├── combined_interview.mp3 # Complete interview (MP3)
-│       └── metadata_*.json # Session metadata
+├── server.py              # FastAPI server
+├── client.py              # Web client
+├── config.py              # Configuration
+├── requirements.txt       # Dependencies
+├── recordings/            # Audio recordings
 ├── test_*.py             # Test scripts
-└── README.md             # This file
+└── manage_services.py    # Service management
 ```
 
-## API Endpoints
+### Adding New Features
+1. Update server endpoints in `server.py`
+2. Modify client interface in `client.py`
+3. Add configuration options to `config.py`
+4. Create test scripts for new functionality
+5. Update documentation
 
-- `GET /recordings` - List all recording sessions
-- `GET /recordings/{session_id}` - Get specific session details
-- `POST /transcribe` - Transcribe audio file
-- `POST /tts` - Convert text to speech
-- `WebSocket /ws` - Real-time communication
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
+4. Add tests for new functionality
 5. Submit a pull request
 
-## License
+## Support
 
-This project is licensed under the MIT License.
+For issues and questions:
+1. Check the troubleshooting section
+2. Review existing issues
+3. Create a new issue with detailed information
+4. Include system information and error logs

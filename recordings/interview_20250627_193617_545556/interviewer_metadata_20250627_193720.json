@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_193720",
+  "text": "Hello and welcome! I understand you're applying for the marketing manager position at our company. Could you please share a bit about your experience in marketing and what draws you to this role?",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_193720.mp3",
+  "file_size": 219360
+}

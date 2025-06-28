@@ -1,9 +1,0 @@
-{
-  "type": "interviewer_speech",
-  "timestamp": "20250627_182959",
-  "text": "Voice changed to echo. This is how I will sound for your interview.",
-  "voice": "echo",
-  "model": "tts-1",
-  "filename": "interviewer_20250627_182959.mp3",
-  "file_size": 84480
-}

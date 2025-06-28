@@ -1,7 +1,7 @@
 import os
 import whisper
 import asyncio
-from fastapi import FastAPI, WebSocket, UploadFile, File, Form, Response
+from fastapi import FastAPI, WebSocket, UploadFile, File, Form, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -212,7 +212,9 @@ def combine_audio_files(session_dir: Path, output_filename: str = None):
         audio_files = []
         for file in session_dir.iterdir():
             if file.suffix.lower() in ['.mp3', '.wav', '.webm', '.m4a']:
-                audio_files.append(str(file))
+                # Skip the combined file if it already exists
+                if file.name != output_filename:
+                    audio_files.append(file.name)
         
         if not audio_files:
             print("No audio files found to combine")
@@ -221,10 +223,13 @@ def combine_audio_files(session_dir: Path, output_filename: str = None):
         # Sort files by timestamp (assuming they have timestamps in filenames)
         audio_files.sort()
         
-        # Create a file list for ffmpeg
+        print(f"Found {len(audio_files)} audio files to combine: {audio_files}")
+        
+        # Create a file list for ffmpeg with just filenames
         file_list_path = session_dir / "file_list.txt"
         with open(file_list_path, 'w') as f:
             for audio_file in audio_files:
+                # Use just the filename, ffmpeg will look in current directory
                 f.write(f"file '{audio_file}'\n")
         
         # Combine audio files
@@ -233,13 +238,16 @@ def combine_audio_files(session_dir: Path, output_filename: str = None):
             'ffmpeg',
             '-f', 'concat',
             '-safe', '0',
-            '-i', str(file_list_path),
+            '-i', 'file_list.txt',  # Use relative path since we're running from session_dir
             '-c', 'copy',
             '-y',  # Overwrite output file
-            str(output_path)
+            output_filename  # Use relative path since we're running from session_dir
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        print(f"Running ffmpeg command from {session_dir}: {' '.join(cmd)}")
+        
+        # Run ffmpeg from the session directory so relative paths work
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(session_dir))
         
         # Clean up file list
         if file_list_path.exists():
@@ -487,10 +495,6 @@ async def websocket_endpoint(websocket: WebSocket):
             initial_message = INTERVIEW_QUESTIONS["introduction"]["question"]
         
         # Send initial greeting
-        greeting = generate_initial_greeting()
-        used_questions[client_id].add(greeting)  # Mark initial question as used
-        audio_data = text_to_speech(greeting)
-        
         await websocket.send_json({
             "type": "greeting",
             "message": initial_message,
@@ -841,6 +845,38 @@ async def text_to_speech(text: str = Form(...), voice: str = Form(None), session
     except Exception as e:
         print(f"Error generating TTS: {e}")
         return {"error": f"TTS generation failed: {str(e)}"}
+
+@app.get("/recordings/{session_id}/{filename}")
+async def serve_audio_file(session_id: str, filename: str):
+    """Serve audio files from recordings directory"""
+    file_path = RECORDINGS_DIR / session_id / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Determine content type based on file extension
+    content_type = "audio/mpeg"  # Default for MP3
+    if filename.endswith('.wav'):
+        content_type = "audio/wav"
+    elif filename.endswith('.webm'):
+        content_type = "audio/webm"
+    elif filename.endswith('.m4a'):
+        content_type = "audio/mp4"
+    
+    try:
+        with open(file_path, "rb") as f:
+            content = f.read()
+        
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"inline; filename={filename}",
+                "Accept-Ranges": "bytes"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host=HOST, port=PORT, reload=DEBUG)

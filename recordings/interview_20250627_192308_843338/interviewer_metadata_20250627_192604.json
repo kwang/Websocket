@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_192604",
+  "text": "Hello, thank you for taking the time to discuss your qualifications with me today. I'm excited to learn more about your background and experience. Could you please walk me through your relevant experience in project management?",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_192604.mp3",
+  "file_size": 261600
+}
