@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_183550",
+  "text": "Hello! This is a test of the new MP3 conversion and combining functionality.",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_183550.mp3",
+  "file_size": 98880
+}

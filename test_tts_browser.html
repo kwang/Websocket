@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAI TTS Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            background: #e9ecef;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OpenAI TTS Test</h1>
+        <p>Test the OpenAI Text-to-Speech functionality</p>
+        
+        <div id="status" class="status info">Ready to test TTS</div>
+        
+        <div>
+            <button onclick="testOpenAITTS()">Test OpenAI TTS</button>
+            <button onclick="testBrowserSpeech()">Test Browser Speech</button>
+            <button onclick="testBoth()">Test Both</button>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <label for="voiceSelect">Select AI Voice:</label>
+            <select id="voiceSelect" onchange="testSelectedVoice()">
+                <option value="alloy">Alloy (Neutral)</option>
+                <option value="echo">Echo (Male)</option>
+                <option value="fable">Fable (Male)</option>
+                <option value="onyx">Onyx (Male)</option>
+                <option value="nova">Nova (Female)</option>
+                <option value="shimmer">Shimmer (Female)</option>
+            </select>
+            <button onclick="testSelectedVoice()">Test Selected Voice</button>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>Test Text:</h3>
+            <textarea id="testText" rows="4" style="width: 100%; padding: 10px;">Hello! I'm your AI interviewer. This is a test of the OpenAI text-to-speech system. The voice should sound natural and clear.</textarea>
+            <button onclick="speakCustomText()">Speak Custom Text</button>
+        </div>
+    </div>
+
+    <script>
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        async function speakWithOpenAI(text, voice = null) {
+            try {
+                updateStatus('Generating speech with OpenAI TTS...', 'info');
+                
+                const formData = new FormData();
+                formData.append('text', text);
+                
+                // Use the provided voice or the selected voice from the dropdown
+                const selectedVoice = voice || document.getElementById('voiceSelect')?.value || 'alloy';
+                formData.append('voice', selectedVoice);
+                
+                const response = await fetch('http://localhost:8000/tts', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`TTS request failed: ${response.status}`);
+                }
+                
+                const audioBlob = await response.blob();
+                const audioUrl = URL.createObjectURL(audioBlob);
+                
+                const audio = new Audio(audioUrl);
+                
+                audio.onloadstart = () => {
+                    updateStatus(`Playing OpenAI TTS audio (${selectedVoice} voice)...`, 'info');
+                };
+                
+                audio.onended = () => {
+                    updateStatus(`OpenAI TTS (${selectedVoice} voice) completed successfully!`, 'success');
+                    URL.revokeObjectURL(audioUrl);
+                };
+                
+                audio.onerror = (e) => {
+                    updateStatus('OpenAI TTS error: ' + e.message, 'error');
+                    URL.revokeObjectURL(audioUrl);
+                };
+                
+                await audio.play();
+                
+            } catch (error) {
+                updateStatus('OpenAI TTS failed: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        function speakWithBrowser(text) {
+            if ('speechSynthesis' in window) {
+                updateStatus('Using browser speech synthesis...', 'info');
+                
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                utterance.rate = 0.9;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                
+                utterance.onstart = () => {
+                    updateStatus('Browser speech started...', 'info');
+                };
+                
+                utterance.onend = () => {
+                    updateStatus('Browser speech completed!', 'success');
+                };
+                
+                utterance.onerror = (event) => {
+                    updateStatus('Browser speech error: ' + event.error, 'error');
+                };
+                
+                window.speechSynthesis.speak(utterance);
+            } else {
+                updateStatus('Speech synthesis not supported in this browser', 'error');
+            }
+        }
+
+        async function testOpenAITTS() {
+            const text = document.getElementById('testText').value;
+            try {
+                await speakWithOpenAI(text);
+            } catch (error) {
+                console.error('OpenAI TTS test failed:', error);
+            }
+        }
+
+        function testBrowserSpeech() {
+            const text = document.getElementById('testText').value;
+            speakWithBrowser(text);
+        }
+
+        async function testBoth() {
+            const text = document.getElementById('testText').value;
+            
+            // Test OpenAI TTS first
+            try {
+                await speakWithOpenAI(text);
+                setTimeout(() => {
+                    updateStatus('Now testing browser speech synthesis...', 'info');
+                    setTimeout(() => {
+                        speakWithBrowser(text);
+                    }, 1000);
+                }, 3000);
+            } catch (error) {
+                updateStatus('OpenAI TTS failed, testing browser speech only', 'error');
+                setTimeout(() => {
+                    speakWithBrowser(text);
+                }, 1000);
+            }
+        }
+
+        async function speakCustomText() {
+            const text = document.getElementById('testText').value;
+            if (text.trim() === '') {
+                updateStatus('Please enter some text to speak', 'error');
+                return;
+            }
+            
+            try {
+                await speakWithOpenAI(text);
+            } catch (error) {
+                updateStatus('OpenAI TTS failed, falling back to browser speech', 'error');
+                speakWithBrowser(text);
+            }
+        }
+
+        async function testSelectedVoice() {
+            const voiceSelect = document.getElementById('voiceSelect');
+            const selectedVoice = voiceSelect.value;
+            const text = `This is the ${selectedVoice} voice speaking. How do I sound?`;
+            
+            updateStatus(`Testing ${selectedVoice} voice...`, 'info');
+            
+            try {
+                await speakWithOpenAI(text, selectedVoice);
+            } catch (error) {
+                updateStatus(`${selectedVoice} voice test failed: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html> 

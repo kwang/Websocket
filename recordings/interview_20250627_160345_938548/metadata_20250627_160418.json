@@ -1,0 +1,14 @@
+{
+  "timestamp": "20250627_160418",
+  "audio_file": "response_20250627_160418.wav",
+  "session_id": "interview_20250627_160345_938548",
+  "client_id": "1751065425.938548",
+  "interview_question": "introduction",
+  "response_number": 1,
+  "file_size_bytes": 54257,
+  "file_size_mb": 0.05,
+  "audio_format": "wav",
+  "audio_quality": "high",
+  "whisper_model": "base",
+  "transcription": " I worked for LinkedIn for six years."
+}

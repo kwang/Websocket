@@ -1,0 +1,14 @@
+{
+  "timestamp": "20250627_180343",
+  "audio_file": "response_20250627_180343.wav",
+  "session_id": "interview_20250627_180319_385215",
+  "client_id": "1751072599.385215",
+  "interview_question": "introduction",
+  "response_number": 0,
+  "file_size_bytes": 1058478,
+  "file_size_mb": 1.01,
+  "audio_format": "wav",
+  "audio_quality": "high",
+  "whisper_model": "base",
+  "transcription": " Step the speech synthesis. If you can hear this, speech is working correctly. Hmm? You sure?"
+}

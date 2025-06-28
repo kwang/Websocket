@@ -1,0 +1,14 @@
+{
+  "timestamp": "20250627_161414",
+  "audio_file": "response_20250627_161414.wav",
+  "session_id": "interview_20250627_161351_622527",
+  "client_id": "1751066031.622527",
+  "interview_question": "introduction",
+  "response_number": 0,
+  "file_size_bytes": 70679,
+  "file_size_mb": 0.07,
+  "audio_format": "wav",
+  "audio_quality": "high",
+  "whisper_model": "base",
+  "transcription": " Hello, how are you?"
+}
