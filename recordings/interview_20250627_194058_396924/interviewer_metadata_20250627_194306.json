@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_194306",
+  "text": "Hello, thank you for joining me today. I understand you are applying for the Project Manager position at our company. Could you please share a bit about your experience in project management and what interests you about this role?",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_194306.mp3",
+  "file_size": 270240
+}

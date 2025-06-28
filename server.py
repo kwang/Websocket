@@ -1,7 +1,7 @@
 import os
 import whisper
 import asyncio
-from fastapi import FastAPI, WebSocket, UploadFile, File, Form, Response, HTTPException
+from fastapi import FastAPI, WebSocket, UploadFile, File, Form, Response, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -213,45 +213,43 @@ def combine_audio_files(session_dir: Path, output_filename: str = None):
         for file in session_dir.iterdir():
             if file.suffix.lower() in ['.mp3', '.wav', '.webm', '.m4a']:
                 # Skip the combined file if it already exists
-                if file.name != output_filename:
-                    audio_files.append(file.name)
+                if file.name == output_filename:
+                    continue
+                # Use just the filename, not the full path
+                audio_files.append(file.name)
         
-        if not audio_files:
-            print("No audio files found to combine")
+        if len(audio_files) == 0:
+            print(f"No audio files found in {session_dir}")
             return False
-        
-        # Sort files by timestamp (assuming they have timestamps in filenames)
-        audio_files.sort()
         
         print(f"Found {len(audio_files)} audio files to combine: {audio_files}")
         
-        # Create a file list for ffmpeg with just filenames
+        # Create a file list for ffmpeg concat
         file_list_path = session_dir / "file_list.txt"
         with open(file_list_path, 'w') as f:
             for audio_file in audio_files:
-                # Use just the filename, ffmpeg will look in current directory
+                # Use just the filename in the file list
                 f.write(f"file '{audio_file}'\n")
         
-        # Combine audio files
+        # Run ffmpeg from the session directory
         output_path = session_dir / output_filename
         cmd = [
-            'ffmpeg',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', 'file_list.txt',  # Use relative path since we're running from session_dir
-            '-c', 'copy',
-            '-y',  # Overwrite output file
-            output_filename  # Use relative path since we're running from session_dir
+            'ffmpeg', '-f', 'concat', '-safe', '0', 
+            '-i', 'file_list.txt', '-c', 'copy', '-y', output_filename
         ]
         
         print(f"Running ffmpeg command from {session_dir}: {' '.join(cmd)}")
         
-        # Run ffmpeg from the session directory so relative paths work
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(session_dir))
+        # Change to the session directory and run ffmpeg
+        result = subprocess.run(
+            cmd, 
+            cwd=session_dir,
+            capture_output=True, 
+            text=True
+        )
         
-        # Clean up file list
-        if file_list_path.exists():
-            file_list_path.unlink()
+        # Clean up the file list
+        file_list_path.unlink(missing_ok=True)
         
         if result.returncode == 0:
             print(f"Successfully combined audio files into {output_path}")
@@ -259,8 +257,9 @@ def combine_audio_files(session_dir: Path, output_filename: str = None):
         else:
             print(f"Error combining audio files: {result.stderr}")
             return False
+            
     except Exception as e:
-        print(f"Error during audio combining: {e}")
+        print(f"Error combining audio files: {e}")
         return False
 
 def generate_follow_up(question_type, response):
@@ -671,10 +670,8 @@ async def transcribe_audio(file: UploadFile = File(...), client_id: str = Form(N
                 target_session["audio_files"].append(metadata)
                 print(f"Audio saved successfully for session: {target_session['session_id']}")
                 
-                # Create combined audio file
-                session_dir = RECORDINGS_DIR / target_session['session_id']
-                if CREATE_COMBINED_AUDIO:
-                    combine_audio_files(session_dir)
+                # Audio combining will only happen when Finish button is clicked
+                # Removed automatic combining here
                     
             except Exception as e:
                 print(f"Error saving audio file: {e}")
@@ -826,9 +823,8 @@ async def text_to_speech(text: str = Form(...), voice: str = Form(None), session
                 
                 print(f"Saved interviewer speech: {interviewer_path}")
                 
-                # Create combined audio file
-                if CREATE_COMBINED_AUDIO:
-                    combine_audio_files(session_dir)
+                # Audio combining will only happen when Finish button is clicked
+                # Removed automatic combining here
                 
             except Exception as e:
                 print(f"Error saving interviewer speech: {e}")
@@ -877,6 +873,24 @@ async def serve_audio_file(session_id: str, filename: str):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+@app.post("/finish-session")
+async def finish_session(request: Request):
+    data = await request.json()
+    session_id = data.get("session_id")
+    if not session_id:
+        return {"success": False, "error": "No session_id provided"}
+    session_dir = RECORDINGS_DIR / session_id
+    if not session_dir.exists():
+        return {"success": False, "error": f"Session directory not found: {session_dir}"}
+    try:
+        result = combine_audio_files(session_dir)
+        if result:
+            return {"success": True}
+        else:
+            return {"success": False, "error": "Audio combining failed"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host=HOST, port=PORT, reload=DEBUG)

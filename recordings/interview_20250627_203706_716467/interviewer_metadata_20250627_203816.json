@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_203816",
+  "text": "Hello! It's great to meet you. Can you please introduce yourself and tell me about your experience in customer service?",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_203816.mp3",
+  "file_size": 144000
+}

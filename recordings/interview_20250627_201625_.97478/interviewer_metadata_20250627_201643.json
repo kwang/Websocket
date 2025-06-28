@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_201643",
+  "text": "Hello and welcome! I'm excited to learn more about your experience and how it aligns with the role you're interviewing for. Let's start by discussing your background and skills. Can you tell me about a time when you had to manage a challenging project from start to finish?",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_201643.mp3",
+  "file_size": 336480
+}

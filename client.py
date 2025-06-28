@@ -209,6 +209,7 @@ HTML_CONTENT = """
                 <button id="startRecording">Start Recording</button>
                 <button id="stopRecording" disabled>Stop Recording</button>
                 <button id="testSpeech" onclick="testSpeech()">Test Speech</button>
+                <button id="finishInterview" class="btn btn-success" onclick="finishInterview()">Finish</button>
             </div>
             <div class="control-group">
                 <label for="voiceSelect">AI Voice:</label>
@@ -227,6 +228,7 @@ HTML_CONTENT = """
             <h2>Interview Recordings</h2>
             <button onclick="loadRecordings()">Refresh Recordings</button>
             <div class="recordings-list" id="recordingsList"></div>
+            <div id="sessionDetails" style="display:none;"></div>
         </div>
     </div>
 
@@ -323,14 +325,18 @@ HTML_CONTENT = """
                 const data = await response.json();
                 
                 if (data.error) {
-                    alert('Error loading session details: ' + data.error);
+                    alert('Error loading session details:::: ' + data.error + " sessionId: " + sessionId);
                     return;
                 }
                 
                 const detailsDiv = document.getElementById('sessionDetails');
+                if (detailsDiv == null) {
+                    alert('Session details panel not found.');
+                    return;
+                }
+                detailsDiv.style.display = '';
                 detailsDiv.innerHTML = `
                     <h2>Session: ${data.session_id}</h2>
-                    
                     <div class="audio-section">
                         <h3>Interviewer Audio Files</h3>
                         ${data.interviewer_files.length > 0 ? 
@@ -342,7 +348,6 @@ HTML_CONTENT = """
                             `).join('') : '<p>No interviewer audio files</p>'
                         }
                     </div>
-                    
                     <div class="audio-section">
                         <h3>Candidate Audio Files</h3>
                         ${data.candidate_files.length > 0 ? 
@@ -354,7 +359,6 @@ HTML_CONTENT = """
                             `).join('') : '<p>No candidate audio files</p>'
                         }
                     </div>
-                    
                     ${data.combined_audio ? `
                         <div class="audio-section">
                             <h3>Combined Audio</h3>
@@ -364,22 +368,26 @@ HTML_CONTENT = """
                             </div>
                         </div>
                     ` : ''}
-                    
                     <div class="metadata-section">
                         <h3>Metadata Files</h3>
                         ${data.metadata_files.length > 0 ? 
                             data.metadata_files.map(file => `<p>${file}</p>`).join('') : '<p>No metadata files</p>'
                         }
                     </div>
-                    
-                    <button onclick="showTab('recordings')" class="btn btn-secondary">Back to Recordings</button>
+                    <button onclick="hideSessionDetails()" class="btn btn-secondary">Back to Recordings</button>
                 `;
-                
-                showTab('sessionDetails');
+                // Hide the recordings list while showing details
+                document.getElementById('recordingsList').style.display = 'none';
+                detailsDiv.scrollIntoView({behavior: 'smooth'});
             } catch (error) {
-                console.error('Error loading session details:', error);
-                alert('Error loading session details.');
+                console.error('Error loading session details.', error, sessionId);
+                alert('Error loading session details.' + sessionId);
             }
+        }
+
+        function hideSessionDetails() {
+            document.getElementById('sessionDetails').style.display = 'none';
+            document.getElementById('recordingsList').style.display = '';
         }
 
         function playAudio(sessionId, filename) {
@@ -663,6 +671,32 @@ HTML_CONTENT = """
                 console.error('Voice change test failed:', error);
                 updateStatus('Voice change failed, using default voice');
             });
+        }
+
+        async function finishInterview() {
+            if (!currentSessionId) {
+                alert('No active session to finish.');
+                return;
+            }
+            try {
+                updateStatus('Finishing interview and combining audio...');
+                const response = await fetch('http://localhost:8000/finish-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: currentSessionId })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    updateStatus('Interview finished! Combined audio is ready.');
+                    alert('Interview finished! Combined audio is ready.');
+                } else {
+                    updateStatus('Failed to finish interview: ' + (data.error || 'Unknown error'));
+                    alert('Failed to finish interview: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                updateStatus('Error finishing interview.');
+                alert('Error finishing interview.');
+            }
         }
 
         document.getElementById('startRecording').addEventListener('click', startRecording);

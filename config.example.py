@@ -35,7 +35,7 @@ METADATA_FILENAME_PATTERN = "metadata_{timestamp}.json"
 SESSION_ID_PATTERN = "interview_{date}_{time}_{client_suffix}"
 
 # Combined audio settings
-CREATE_COMBINED_AUDIO = True  # Automatically create combined interview files
+CREATE_COMBINED_AUDIO = False  # Manual audio combining via Finish button
 COMBINED_AUDIO_FILENAME = "combined_interview.mp3"
 
 # Backup settings

@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_205110",
+  "text": "Hello and welcome! I understand you are applying for the software engineer position at our company. Can you please share your experience with software development and any specific programming languages or technologies you are proficient in?",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_205110.mp3",
+  "file_size": 284160
+}

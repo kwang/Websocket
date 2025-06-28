@@ -1,0 +1,9 @@
+{
+  "type": "interviewer_speech",
+  "timestamp": "20250627_203710",
+  "text": "Hello and welcome! I'm excited to learn more about your background and experience. Could you please introduce yourself and tell me about your previous work in project management?",
+  "voice": "alloy",
+  "model": "tts-1",
+  "filename": "interviewer_20250627_203710.mp3",
+  "file_size": 206400
+}
