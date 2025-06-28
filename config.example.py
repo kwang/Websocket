@@ -9,7 +9,7 @@ from pathlib import Path
 # Recording settings
 RECORDINGS_DIR = Path("recordings")
 MAX_RECORDING_SIZE_MB = 50
-AUDIO_FORMAT = "wav"
+AUDIO_FORMAT = "mp3"  # Changed from wav to mp3 for consistency
 AUDIO_QUALITY = "high"  # high, medium, low
 
 # Session settings
@@ -33,6 +33,10 @@ SAVE_AUDIO_QUALITY = True
 AUDIO_FILENAME_PATTERN = "response_{timestamp}.{ext}"
 METADATA_FILENAME_PATTERN = "metadata_{timestamp}.json"
 SESSION_ID_PATTERN = "interview_{date}_{time}_{client_suffix}"
+
+# Combined audio settings
+CREATE_COMBINED_AUDIO = True  # Automatically create combined interview files
+COMBINED_AUDIO_FILENAME = "combined_interview.mp3"
 
 # Backup settings
 AUTO_BACKUP = False
