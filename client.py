@@ -244,7 +244,7 @@ HTML_CONTENT = """
             <div class="session-info" id="sessionInfo" style="display: none;">
                 <strong>Session ID:</strong> <span id="sessionId"></span>
             </div>
-            <div class="status" id="status">Connecting to server... Auto-recording will start when interview begins.</div>
+            <div class="status" id="status">Connected to server. Click "Start Interview & Recording" to begin the interview.</div>
             
             <!-- Video Preview Section -->
             <div class="video-container">
@@ -315,6 +315,7 @@ HTML_CONTENT = """
         let isPlayingTTS = false;
         let autoRecordingEnabled = true;
         let recordingStarted = false;
+        let interviewStarted = false;
 
         function showTab(tabName) {
             // Hide all tab contents
@@ -604,8 +605,8 @@ HTML_CONTENT = """
             conversation.appendChild(messageDiv);
             conversation.scrollTop = conversation.scrollHeight;
             
-            // Speak the message if it's from the interviewer
-            if (role === 'interviewer') {
+            // Speak the message if it's from the interviewer and the interview has started
+            if (role === 'interviewer' && interviewStarted) {
                 // Get the currently selected voice from the dropdown
                 const selectedVoice = document.getElementById('voiceSelect')?.value || 'alloy';
                 speakWithOpenAI(content, selectedVoice);
@@ -622,7 +623,7 @@ HTML_CONTENT = """
                 
                 ws.onopen = function() {
                     isConnected = true;
-                    updateStatus('Connected to server');
+                    updateStatus('Connected to server. Click "Start Interview & Recording" to begin the interview.');
                 };
                 
                 ws.onmessage = async function(event) {
@@ -637,10 +638,7 @@ HTML_CONTENT = """
                             document.getElementById('sessionInfo').style.display = 'block';
                         }
                         
-                        // Auto-start recording on first greeting if not already recording
-                        if (autoRecordingEnabled && !recordingStarted && data.type === 'greeting') {
-                            await startAutoRecording();
-                        }
+                        // Don't auto-start recording - wait for user to click "Start Interview"
                     }
                 };
 
@@ -661,6 +659,20 @@ HTML_CONTENT = """
         }
 
         async function startRecording() {
+            // Mark that the interview has started
+            interviewStarted = true;
+            
+            // Speak any existing interviewer messages that haven't been spoken yet
+            const conversation = document.getElementById('conversation');
+            const interviewerMessages = conversation.querySelectorAll('.message.interviewer');
+            if (interviewerMessages.length > 0) {
+                // Speak the most recent interviewer message
+                const lastInterviewerMessage = interviewerMessages[interviewerMessages.length - 1];
+                const messageText = lastInterviewerMessage.textContent;
+                const selectedVoice = document.getElementById('voiceSelect')?.value || 'alloy';
+                speakWithOpenAI(messageText, selectedVoice);
+            }
+
             // Manual recording start (override for auto-recording)
             if (autoRecordingEnabled && !recordingStarted) {
                 await startAutoRecording();
