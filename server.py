@@ -1097,6 +1097,28 @@ async def save_video(file: UploadFile = File(...), client_id: str = Form(None), 
         with open(video_path, "wb") as f:
             f.write(content)
         
+        # Convert webm to mp4 if needed and keep both
+        mp4_filename = None
+        if file_extension == "webm":
+            mp4_filename = f"response_{timestamp}.mp4"
+            mp4_path = session_dir / mp4_filename
+            try:
+                cmd = [
+                    "ffmpeg", "-i", str(video_path),
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                    "-c:a", "aac", "-b:a", "128k",
+                    "-movflags", "+faststart", "-y", str(mp4_path)
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    print(f"Successfully converted {video_path} to {mp4_path}")
+                else:
+                    print(f"Error converting webm to mp4: {result.stderr}")
+                    mp4_filename = None
+            except Exception as e:
+                print(f"Exception during webm to mp4 conversion: {e}")
+                mp4_filename = None
+        
         # Save metadata
         metadata = {
             "type": "candidate_video",
@@ -1120,7 +1142,7 @@ async def save_video(file: UploadFile = File(...), client_id: str = Form(None), 
         
         print(f"Video saved successfully for session: {target_session['session_id']}")
         
-        return {"success": True, "filename": video_filename, "session_id": target_session["session_id"]}
+        return {"success": True, "filename": video_filename, "mp4_filename": mp4_filename, "session_id": target_session["session_id"]}
         
     except Exception as e:
         print(f"Error saving video: {e}")

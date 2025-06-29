@@ -781,70 +781,53 @@ HTML_CONTENT = """
                         
                         videoRecorder.ondataavailable = (event) => {
                             videoChunks.push(event.data);
-                            
-                            // Save video chunks every 10 seconds (10 chunks at 1 second each)
-                            if (isRecording && videoChunks.length >= 10) {
-                                const videoBlob = new Blob(videoChunks, { type: videoMimeType });
-                                const formData = new FormData();
-                                formData.append('file', videoBlob, `response_${Date.now()}.webm`);
-                                
-                                if (currentSessionId) {
-                                    formData.append('session_id', currentSessionId);
-                                    formData.append('client_id', currentSessionId);
-                                }
-
-                                fetch('http://localhost:8000/save-video', {
-                                    method: 'POST',
-                                    body: formData
-                                }).then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        console.log('Video chunk saved successfully');
-                                    } else {
-                                        console.error('Error saving video chunk:', data.error);
-                                    }
-                                }).catch(error => {
-                                    console.error('Error saving video chunk:', error);
-                                });
-                                
-                                // Clear chunks after saving
-                                videoChunks = [];
-                            }
+                            // Don't save chunks during recording - only collect them
+                            console.log('Video chunk collected, total chunks:', videoChunks.length);
                         };
 
                         videoRecorder.onstop = async () => {
-                            // Save any remaining video chunks when stopping
-                            if (videoChunks.length > 0) {
-                                const videoBlob = new Blob(videoChunks, { type: videoMimeType });
-                                const formData = new FormData();
-                                formData.append('file', videoBlob, 'recording.webm');
-                                
-                                if (currentSessionId) {
-                                    formData.append('session_id', currentSessionId);
-                                    formData.append('client_id', currentSessionId);
-                                }
-
-                                try {
-                                    const response = await fetch('http://localhost:8000/save-video', {
-                                        method: 'POST',
-                                        body: formData
-                                    });
-                                    const data = await response.json();
+                            // Only save video when the interview is actually finished
+                            // Don't save during continuous recording restarts
+                            if (!isRecording) {
+                                // Interview is finished, save the complete video
+                                if (videoChunks.length > 0) {
+                                    const videoBlob = new Blob(videoChunks, { type: videoMimeType });
+                                    const formData = new FormData();
+                                    formData.append('file', videoBlob, 'recording.webm');
                                     
-                                    if (data.success) {
-                                        console.log('Final video saved successfully');
-                                        updateStatus('Video saved successfully');
-                                    } else {
-                                        console.error('Error saving final video:', data.error);
-                                        updateStatus('Error saving video: ' + data.error);
+                                    if (currentSessionId) {
+                                        formData.append('session_id', currentSessionId);
+                                        formData.append('client_id', currentSessionId);
                                     }
-                                } catch (error) {
-                                    console.error('Error saving final video:', error);
-                                    updateStatus('Error saving video');
+
+                                    try {
+                                        const response = await fetch('http://localhost:8000/save-video', {
+                                            method: 'POST',
+                                            body: formData
+                                        });
+                                        const data = await response.json();
+                                        
+                                        if (data.success) {
+                                            console.log('Final video saved successfully');
+                                            updateStatus('Video saved successfully');
+                                        } else {
+                                            console.error('Error saving final video:', data.error);
+                                            updateStatus('Error saving video: ' + data.error);
+                                        }
+                                    } catch (error) {
+                                        console.error('Error saving final video:', error);
+                                        updateStatus('Error saving video');
+                                    }
                                 }
+                            } else {
+                                // This is just a restart for continuous recording, don't save
+                                console.log('Video recording restarted for continuous mode, chunks preserved');
                             }
                             
-                            videoChunks = [];
+                            // Don't clear chunks during continuous recording
+                            if (!isRecording) {
+                                videoChunks = [];
+                            }
                         };
                         
                         // Set timeslice to 1 second for continuous recording
@@ -1340,70 +1323,53 @@ HTML_CONTENT = """
                     
                     videoRecorder.ondataavailable = (event) => {
                         videoChunks.push(event.data);
-                        
-                        // Save video chunks every 10 seconds (10 chunks at 1 second each)
-                        if (isRecording && videoChunks.length >= 10) {
-                            const videoBlob = new Blob(videoChunks, { type: videoMimeType });
-                            const formData = new FormData();
-                            formData.append('file', videoBlob, `response_${Date.now()}.webm`);
-                            
-                            if (currentSessionId) {
-                                formData.append('session_id', currentSessionId);
-                                formData.append('client_id', currentSessionId);
-                            }
-
-                            fetch('http://localhost:8000/save-video', {
-                                method: 'POST',
-                                body: formData
-                            }).then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    console.log('Video chunk saved successfully');
-                                } else {
-                                    console.error('Error saving video chunk:', data.error);
-                                }
-                            }).catch(error => {
-                                console.error('Error saving video chunk:', error);
-                            });
-                            
-                            // Clear chunks after saving
-                            videoChunks = [];
-                        }
+                        // Don't save chunks during recording - only collect them
+                        console.log('Video chunk collected, total chunks:', videoChunks.length);
                     };
 
                     videoRecorder.onstop = async () => {
-                        // Save any remaining video chunks when stopping
-                        if (videoChunks.length > 0) {
-                            const videoBlob = new Blob(videoChunks, { type: videoMimeType });
-                            const formData = new FormData();
-                            formData.append('file', videoBlob, 'recording.webm');
-                            
-                            if (currentSessionId) {
-                                formData.append('session_id', currentSessionId);
-                                formData.append('client_id', currentSessionId);
-                            }
-
-                            try {
-                                const response = await fetch('http://localhost:8000/save-video', {
-                                    method: 'POST',
-                                    body: formData
-                                });
-                                const data = await response.json();
+                        // Only save video when the interview is actually finished
+                        // Don't save during continuous recording restarts
+                        if (!isRecording) {
+                            // Interview is finished, save the complete video
+                            if (videoChunks.length > 0) {
+                                const videoBlob = new Blob(videoChunks, { type: videoMimeType });
+                                const formData = new FormData();
+                                formData.append('file', videoBlob, 'recording.webm');
                                 
-                                if (data.success) {
-                                    console.log('Final video saved successfully');
-                                    updateStatus('Video saved successfully');
-                                } else {
-                                    console.error('Error saving final video:', data.error);
-                                    updateStatus('Error saving video: ' + data.error);
+                                if (currentSessionId) {
+                                    formData.append('session_id', currentSessionId);
+                                    formData.append('client_id', currentSessionId);
                                 }
-                            } catch (error) {
-                                console.error('Error saving final video:', error);
-                                updateStatus('Error saving video');
+
+                                try {
+                                    const response = await fetch('http://localhost:8000/save-video', {
+                                        method: 'POST',
+                                        body: formData
+                                    });
+                                    const data = await response.json();
+                                    
+                                    if (data.success) {
+                                        console.log('Final video saved successfully');
+                                        updateStatus('Video saved successfully');
+                                    } else {
+                                        console.error('Error saving final video:', data.error);
+                                        updateStatus('Error saving video: ' + data.error);
+                                    }
+                                } catch (error) {
+                                    console.error('Error saving final video:', error);
+                                    updateStatus('Error saving video');
+                                }
                             }
+                        } else {
+                            // This is just a restart for continuous recording, don't save
+                            console.log('Video recording restarted for continuous mode, chunks preserved');
                         }
                         
-                        videoChunks = [];
+                        // Don't clear chunks during continuous recording
+                        if (!isRecording) {
+                            videoChunks = [];
+                        }
                     };
                     
                     // Set timeslice to 1 second for continuous recording
