@@ -256,6 +256,9 @@ HTML_CONTENT = """
                     <label>
                         <input type="checkbox" id="enableAudio" checked> Enable Audio Recording
                     </label>
+                    <label>
+                        <input type="checkbox" id="enableDesktopAudio" checked> Enable Desktop Audio Capture
+                    </label>
                 </div>
             </div>
             
@@ -301,9 +304,11 @@ HTML_CONTENT = """
         let isConnected = false;
         let currentSessionId = null;
         let mediaStream = null;
+        let desktopStream = null;
         let isRecording = false;
         let audioContext = null;
         let microphoneSource = null;
+        let desktopSource = null;
         let ttsSource = null;
         let mixedAudioDestination = null;
         let ttsAudioQueue = [];
@@ -695,6 +700,14 @@ HTML_CONTENT = """
 
                     mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
                     
+                    // Capture desktop audio if video recording is enabled
+                    if (enableVideo) {
+                        const enableDesktopAudio = document.getElementById('enableDesktopAudio').checked;
+                        if (enableDesktopAudio) {
+                            await captureDesktopAudio();
+                        }
+                    }
+                    
                     // Set up video preview
                     if (enableVideo) {
                         const videoPreview = document.getElementById('videoPreview');
@@ -751,8 +764,7 @@ HTML_CONTENT = """
                     
                     if (enableVideo) {
                         // Set up audio mixing for video recording
-                        microphoneSource = audioContext.createMediaStreamSource(mediaStream);
-                        microphoneSource.connect(mixedAudioDestination);
+                        await setupAudioMixing();
                         
                         // Create combined stream with video and mixed audio
                         const videoTracks = mediaStream.getVideoTracks();
@@ -769,11 +781,40 @@ HTML_CONTENT = """
                         
                         videoRecorder.ondataavailable = (event) => {
                             videoChunks.push(event.data);
+                            
+                            // Save video chunks every 10 seconds (10 chunks at 1 second each)
+                            if (isRecording && videoChunks.length >= 10) {
+                                const videoBlob = new Blob(videoChunks, { type: videoMimeType });
+                                const formData = new FormData();
+                                formData.append('file', videoBlob, `response_${Date.now()}.webm`);
+                                
+                                if (currentSessionId) {
+                                    formData.append('session_id', currentSessionId);
+                                    formData.append('client_id', currentSessionId);
+                                }
+
+                                fetch('http://localhost:8000/save-video', {
+                                    method: 'POST',
+                                    body: formData
+                                }).then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        console.log('Video chunk saved successfully');
+                                    } else {
+                                        console.error('Error saving video chunk:', data.error);
+                                    }
+                                }).catch(error => {
+                                    console.error('Error saving video chunk:', error);
+                                });
+                                
+                                // Clear chunks after saving
+                                videoChunks = [];
+                            }
                         };
 
                         videoRecorder.onstop = async () => {
-                            // Only save video when interview is finished, not on continuous recording
-                            if (!isRecording) {
+                            // Save any remaining video chunks when stopping
+                            if (videoChunks.length > 0) {
                                 const videoBlob = new Blob(videoChunks, { type: videoMimeType });
                                 const formData = new FormData();
                                 formData.append('file', videoBlob, 'recording.webm');
@@ -791,14 +832,14 @@ HTML_CONTENT = """
                                     const data = await response.json();
                                     
                                     if (data.success) {
-                                        console.log('Video saved successfully');
+                                        console.log('Final video saved successfully');
                                         updateStatus('Video saved successfully');
                                     } else {
-                                        console.error('Error saving video:', data.error);
+                                        console.error('Error saving final video:', data.error);
                                         updateStatus('Error saving video: ' + data.error);
                                     }
                                 } catch (error) {
-                                    console.error('Error saving video:', error);
+                                    console.error('Error saving final video:', error);
                                     updateStatus('Error saving video');
                                 }
                             }
@@ -856,12 +897,22 @@ HTML_CONTENT = """
                         microphoneSource.disconnect();
                         microphoneSource = null;
                     }
+                    if (desktopSource) {
+                        desktopSource.disconnect();
+                        desktopSource = null;
+                    }
                     if (ttsSource) {
                         ttsSource.disconnect();
                         ttsSource = null;
                     }
                     audioContext.close();
                     audioContext = null;
+                }
+                
+                // Stop desktop stream
+                if (desktopStream) {
+                    desktopStream.getTracks().forEach(track => track.stop());
+                    desktopStream = null;
                 }
                 
                 // Clear video preview
@@ -934,9 +985,23 @@ HTML_CONTENT = """
                 // If video recording is active, mix the TTS audio into the video recording
                 if (isRecording && audioContext && mixedAudioDestination) {
                     try {
+                        console.log('Attempting to mix TTS audio into video recording...');
+                        
+                        // Ensure audio context is running
+                        if (audioContext.state === 'suspended') {
+                            await audioContext.resume();
+                        }
+                        
                         // Create a new audio element for mixing
                         const mixingAudio = new Audio(audioUrl);
                         mixingAudio.muted = true; // Don't play through speakers
+                        
+                        // Wait for audio to be loaded before creating stream
+                        await new Promise((resolve, reject) => {
+                            mixingAudio.onloadeddata = resolve;
+                            mixingAudio.onerror = reject;
+                            mixingAudio.load();
+                        });
                         
                         // Create a media stream source from the audio element
                         const audioStream = mixingAudio.captureStream();
@@ -950,12 +1015,21 @@ HTML_CONTENT = """
                         mixingAudio.onended = () => {
                             ttsAudioSource.disconnect();
                             URL.revokeObjectURL(audioUrl);
+                            console.log('TTS audio mixing completed');
                         };
                         
-                        console.log('TTS audio mixed into video recording');
+                        console.log('TTS audio mixed into video recording successfully');
                     } catch (error) {
                         console.error('Error mixing TTS audio:', error);
+                        // Fallback: try to play audio normally so it might be captured by microphone
+                        console.log('Falling back to normal audio playback for microphone capture');
                     }
+                } else {
+                    console.log('TTS mixing conditions not met:', {
+                        isRecording,
+                        hasAudioContext: !!audioContext,
+                        hasMixedDestination: !!mixedAudioDestination
+                    });
                 }
                 
                 audio.onended = () => {
@@ -1013,6 +1087,56 @@ HTML_CONTENT = """
             console.log('Voice changed to:', selectedVoice);
         }
 
+        async function captureDesktopAudio() {
+            try {
+                // Request desktop capture with audio
+                const desktopMedia = await navigator.mediaDevices.getDisplayMedia({
+                    video: false,
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+                
+                // Extract only the audio tracks
+                const audioTracks = desktopMedia.getAudioTracks();
+                if (audioTracks.length > 0) {
+                    desktopStream = new MediaStream(audioTracks);
+                    console.log('Desktop audio captured successfully');
+                    return true;
+                } else {
+                    console.log('No audio tracks found in desktop capture');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error capturing desktop audio:', error);
+                return false;
+            }
+        }
+
+        async function setupAudioMixing() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                mixedAudioDestination = audioContext.createMediaStreamDestination();
+            }
+
+            // Connect microphone audio
+            if (mediaStream && mediaStream.getAudioTracks().length > 0) {
+                microphoneSource = audioContext.createMediaStreamSource(mediaStream);
+                microphoneSource.connect(mixedAudioDestination);
+                console.log('Microphone audio connected to mixer');
+            }
+
+            // Connect desktop audio
+            const enableDesktopAudio = document.getElementById('enableDesktopAudio').checked;
+            if (enableDesktopAudio && desktopStream && desktopStream.getAudioTracks().length > 0) {
+                desktopSource = audioContext.createMediaStreamSource(desktopStream);
+                desktopSource.connect(mixedAudioDestination);
+                console.log('Desktop audio connected to mixer');
+            }
+        }
+
         async function finishInterview() {
             // Stop all recording completely when finishing
             if (isRecording) {
@@ -1036,12 +1160,22 @@ HTML_CONTENT = """
                         microphoneSource.disconnect();
                         microphoneSource = null;
                     }
+                    if (desktopSource) {
+                        desktopSource.disconnect();
+                        desktopSource = null;
+                    }
                     if (ttsSource) {
                         ttsSource.disconnect();
                         ttsSource = null;
                     }
                     audioContext.close();
                     audioContext = null;
+                }
+                
+                // Stop desktop stream
+                if (desktopStream) {
+                    desktopStream.getTracks().forEach(track => track.stop());
+                    desktopStream = null;
                 }
                 
                 // Clear video preview
@@ -1120,6 +1254,14 @@ HTML_CONTENT = """
 
                 mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
                 
+                // Capture desktop audio if video recording is enabled
+                if (enableVideo) {
+                    const enableDesktopAudio = document.getElementById('enableDesktopAudio').checked;
+                    if (enableDesktopAudio) {
+                        await captureDesktopAudio();
+                    }
+                }
+                
                 // Set up video preview
                 if (enableVideo) {
                     const videoPreview = document.getElementById('videoPreview');
@@ -1181,8 +1323,7 @@ HTML_CONTENT = """
                 
                 if (enableVideo) {
                     // Set up audio mixing for video recording
-                    microphoneSource = audioContext.createMediaStreamSource(mediaStream);
-                    microphoneSource.connect(mixedAudioDestination);
+                    await setupAudioMixing();
                     
                     // Create combined stream with video and mixed audio
                     const videoTracks = mediaStream.getVideoTracks();
@@ -1199,11 +1340,40 @@ HTML_CONTENT = """
                     
                     videoRecorder.ondataavailable = (event) => {
                         videoChunks.push(event.data);
+                        
+                        // Save video chunks every 10 seconds (10 chunks at 1 second each)
+                        if (isRecording && videoChunks.length >= 10) {
+                            const videoBlob = new Blob(videoChunks, { type: videoMimeType });
+                            const formData = new FormData();
+                            formData.append('file', videoBlob, `response_${Date.now()}.webm`);
+                            
+                            if (currentSessionId) {
+                                formData.append('session_id', currentSessionId);
+                                formData.append('client_id', currentSessionId);
+                            }
+
+                            fetch('http://localhost:8000/save-video', {
+                                method: 'POST',
+                                body: formData
+                            }).then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    console.log('Video chunk saved successfully');
+                                } else {
+                                    console.error('Error saving video chunk:', data.error);
+                                }
+                            }).catch(error => {
+                                console.error('Error saving video chunk:', error);
+                            });
+                            
+                            // Clear chunks after saving
+                            videoChunks = [];
+                        }
                     };
 
                     videoRecorder.onstop = async () => {
-                        // Only save video when interview is finished, not on continuous recording
-                        if (!isRecording) {
+                        // Save any remaining video chunks when stopping
+                        if (videoChunks.length > 0) {
                             const videoBlob = new Blob(videoChunks, { type: videoMimeType });
                             const formData = new FormData();
                             formData.append('file', videoBlob, 'recording.webm');
@@ -1221,14 +1391,14 @@ HTML_CONTENT = """
                                 const data = await response.json();
                                 
                                 if (data.success) {
-                                    console.log('Video saved successfully');
+                                    console.log('Final video saved successfully');
                                     updateStatus('Video saved successfully');
                                 } else {
-                                    console.error('Error saving video:', data.error);
+                                    console.error('Error saving final video:', data.error);
                                     updateStatus('Error saving video: ' + data.error);
                                 }
                             } catch (error) {
-                                console.error('Error saving video:', error);
+                                console.error('Error saving final video:', error);
                                 updateStatus('Error saving video');
                             }
                         }

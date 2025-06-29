@@ -42,6 +42,19 @@ else:
 active_connections = {}
 conversation_history = {}
 interview_sessions = {}
+used_questions = {}
+current_question_types = {}
+
+# Simple cache for responses
+response_cache = {}
+
+def get_cached_response(key: str):
+    """Get a cached response"""
+    return response_cache.get(key)
+
+def cache_response(key: str, value: str):
+    """Cache a response"""
+    response_cache[key] = value
 
 # Interview questions and follow-up prompts
 INTERVIEW_QUESTIONS = {
@@ -221,12 +234,13 @@ def combine_audio_files(session_dir: Path, output_filename: str = None):
         file_list_path = session_dir / "file_list.txt"
         with open(file_list_path, 'w') as f:
             for audio_file in audio_files:
+                # Use only the filename, not the full path
                 f.write(f"file '{audio_file.name}'\n")
         
         # Use ffmpeg to concatenate audio files
         cmd = [
             'ffmpeg', '-f', 'concat', '-safe', '0',
-            '-i', str(file_list_path),
+            '-i', 'file_list.txt',
             '-c', 'copy', '-y', str(output_path)
         ]
         
@@ -275,14 +289,33 @@ def combine_video_files(session_dir: Path, output_filename: str = None):
         
         # Create a file list for ffmpeg concat
         file_list_path = session_dir / "video_file_list.txt"
-        with open(file_list_path, 'w') as f:
-            for video_file in video_files:
-                f.write(f"file '{video_file.name}'\n")
+        
+        # Ensure the file list is created properly
+        try:
+            with open(file_list_path, 'w') as f:
+                for video_file in video_files:
+                    f.write(f"file '{video_file.name}'\n")
+            
+            # Verify the file was created and has content
+            if not file_list_path.exists():
+                print(f"Failed to create file list at {file_list_path}")
+                return False
+                
+            with open(file_list_path, 'r') as f:
+                content = f.read().strip()
+                if not content:
+                    print(f"File list is empty: {file_list_path}")
+                    file_list_path.unlink(missing_ok=True)
+                    return False
+                    
+        except Exception as e:
+            print(f"Error creating file list: {e}")
+            return False
         
         # Use ffmpeg to concatenate video files
         cmd = [
             'ffmpeg', '-f', 'concat', '-safe', '0',
-            '-i', str(file_list_path),
+            '-i', 'video_file_list.txt',
             '-c', 'copy', '-y', str(output_path)
         ]
         
@@ -291,8 +324,12 @@ def combine_video_files(session_dir: Path, output_filename: str = None):
         
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=session_dir)
         
-        # Clean up the file list
-        file_list_path.unlink(missing_ok=True)
+        # Clean up the file list only after ffmpeg completes
+        try:
+            if file_list_path.exists():
+                file_list_path.unlink()
+        except Exception as e:
+            print(f"Warning: Could not delete file list: {e}")
         
         if result.returncode == 0:
             print(f"Successfully combined video files into {output_path}")
@@ -305,7 +342,7 @@ def combine_video_files(session_dir: Path, output_filename: str = None):
         print(f"Error combining video files: {e}")
         return False
 
-def generate_follow_up(question_type, response):
+def generate_follow_up(question_type, response, client_id=None):
     """Generate a contextual follow-up question based on the candidate's response"""
     if client_id not in used_questions:
         used_questions[client_id] = set()
@@ -318,22 +355,26 @@ def generate_follow_up(question_type, response):
         if cached:
             summary = cached
         else:
-            summary_response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": """You are a friendly and professional AI interviewer. Summarize what the person said in one sentence, using 'You' instead of 'The candidate'. 
-                    Make your summary:
-                    1. Brief and to the point
-                    2. Focus on key points only
-                    3. Use natural language
-                    Keep it to one sentence."""},
-                    {"role": "user", "content": f"Person's response: {response}\nProvide a brief summary."}
-                ],
-                temperature=0.7,
-                max_tokens=50
-            )
-            summary = summary_response.choices[0].message.content
-            cache_response(cache_key, summary)
+            if OPENAI_API_KEY:
+                client = openai.OpenAI(api_key=OPENAI_API_KEY)
+                summary_response = client.chat.completions.create(
+                    model=OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": """You are a friendly and professional AI interviewer. Summarize what the person said in one sentence, using 'You' instead of 'The candidate'. 
+                        Make your summary:
+                        1. Brief and to the point
+                        2. Focus on key points only
+                        3. Use natural language
+                        Keep it to one sentence."""},
+                        {"role": "user", "content": f"Person's response: {response}\nProvide a brief summary."}
+                    ],
+                    temperature=0.7,
+                    max_tokens=50
+                )
+                summary = summary_response.choices[0].message.content
+                cache_response(cache_key, summary)
+            else:
+                summary = "Thanks for sharing that."
     except Exception as e:
         print(f"Error generating summary: {e}")
         summary = "Thanks for sharing that."
@@ -359,23 +400,31 @@ def generate_follow_up(question_type, response):
             if cached:
                 next_question = cached
             else:
-                system_prompt = f"""You are a friendly and professional AI interviewer. Generate a brief follow-up question about {question_type}. 
-                The question should be:
-                1. One sentence only
-                2. Clear and direct
-                3. Easy to answer
-                Keep it concise."""
-                response = client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Generate a brief follow-up question about {question_type}."}
-                    ],
-                    temperature=0.7,
-                    max_tokens=50
-                )
-                next_question = response.choices[0].message.content
-                cache_response(cache_key, next_question)
+                if OPENAI_API_KEY:
+                    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+                    system_prompt = f"""You are a friendly and professional AI interviewer. Generate a brief follow-up question about {question_type}. 
+                    The question should be:
+                    1. One sentence only
+                    2. Clear and direct
+                    3. Easy to answer
+                    Keep it concise."""
+                    response_obj = client.chat.completions.create(
+                        model=OPENAI_MODEL,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": f"Generate a brief follow-up question about {question_type}."}
+                        ],
+                        temperature=0.7,
+                        max_tokens=50
+                    )
+                    next_question = response_obj.choices[0].message.content
+                    cache_response(cache_key, next_question)
+                else:
+                    # Fallback to predefined questions
+                    question_types = list(INTERVIEW_QUESTIONS.keys())
+                    current_index = question_types.index(question_type) if question_type in question_types else 0
+                    next_type = question_types[(current_index + 1) % len(question_types)]
+                    next_question = INTERVIEW_QUESTIONS[next_type]["question"]
             
             used_questions[client_id].add(next_question)
             current_question_types[client_id] = question_type
@@ -384,7 +433,7 @@ def generate_follow_up(question_type, response):
             print(f"Error generating follow-up: {e}")
             # Fallback to predefined questions if OpenAI fails
             question_types = list(INTERVIEW_QUESTIONS.keys())
-            current_index = question_types.index(question_type)
+            current_index = question_types.index(question_type) if question_type in question_types else 0
             next_type = question_types[(current_index + 1) % len(question_types)]
             next_question = INTERVIEW_QUESTIONS[next_type]["question"]
             used_questions[client_id].add(next_question)
@@ -402,23 +451,40 @@ def generate_follow_up(question_type, response):
         if cached:
             follow_up = cached
         else:
-            system_prompt = """You are a friendly and professional AI interviewer. Generate a brief follow-up question based on the candidate's response. 
-            The question should be:
-            1. One sentence only
-            2. Direct and relevant
-            3. Easy to understand
-            Keep it concise."""
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Candidate's response: {response}\nGenerate a brief follow-up question."}
-                ],
-                temperature=0.7,
-                max_tokens=50
-            )
-            follow_up = response.choices[0].message.content
-            cache_response(cache_key, follow_up)
+            if OPENAI_API_KEY:
+                client = openai.OpenAI(api_key=OPENAI_API_KEY)
+                system_prompt = """You are a friendly and professional AI interviewer. Generate a brief follow-up question based on the candidate's response. 
+                The question should be:
+                1. One sentence only
+                2. Direct and relevant
+                3. Easy to understand
+                Keep it concise."""
+                response_obj = client.chat.completions.create(
+                    model=OPENAI_MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Candidate's response: {response}\nGenerate a brief follow-up question."}
+                    ],
+                    temperature=0.7,
+                    max_tokens=50
+                )
+                follow_up = response_obj.choices[0].message.content
+                cache_response(cache_key, follow_up)
+            else:
+                # Fallback to predefined questions
+                follow_ups = INTERVIEW_QUESTIONS[question_type]["follow_ups"]
+                available_follow_ups = [q for q in follow_ups if q not in used_questions[client_id]]
+                
+                if not available_follow_ups:
+                    question_types = list(INTERVIEW_QUESTIONS.keys())
+                    current_index = question_types.index(question_type) if question_type in question_types else 0
+                    next_type = question_types[(current_index + 1) % len(question_types)]
+                    next_question = INTERVIEW_QUESTIONS[next_type]["question"]
+                    used_questions[client_id].add(next_question)
+                    current_question_types[client_id] = next_type
+                    return f"{summary}\n\n{next_question}"
+                
+                follow_up = available_follow_ups[0]
         
         used_questions[client_id].add(follow_up)
         return f"{summary}\n\n{follow_up}"
@@ -430,7 +496,7 @@ def generate_follow_up(question_type, response):
         
         if not available_follow_ups:
             question_types = list(INTERVIEW_QUESTIONS.keys())
-            current_index = question_types.index(question_type)
+            current_index = question_types.index(question_type) if question_type in question_types else 0
             next_type = question_types[(current_index + 1) % len(question_types)]
             next_question = INTERVIEW_QUESTIONS[next_type]["question"]
             used_questions[client_id].add(next_question)
@@ -571,11 +637,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     if not follow_up:
                         # Fallback to predefined questions
                         current_question = conversation_history[client_id][-2]["content"] if len(conversation_history[client_id]) > 1 else "introduction"
-                        follow_up = generate_follow_up("introduction", transcription)
+                        follow_up = generate_follow_up("introduction", transcription, client_id)
                 else:
                     # Use fallback questions
                     current_question = conversation_history[client_id][-2]["content"] if len(conversation_history[client_id]) > 1 else "introduction"
-                    follow_up = generate_follow_up("introduction", transcription)
+                    follow_up = generate_follow_up("introduction", transcription, client_id)
                 
                 # Send follow-up
                 await websocket.send_json({
