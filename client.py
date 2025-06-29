@@ -316,6 +316,7 @@ HTML_CONTENT = """
         let autoRecordingEnabled = true;
         let recordingStarted = false;
         let interviewStarted = false;
+        let interviewFinished = false;
 
         function showTab(tabName) {
             // Hide all tab contents
@@ -950,6 +951,7 @@ HTML_CONTENT = """
         }
         
         async function speakWithOpenAI(text, voice = null) {
+            if (interviewFinished) return;
             try {
                 const formData = new FormData();
                 formData.append('text', text);
@@ -976,6 +978,7 @@ HTML_CONTENT = """
                 const audioUrl = URL.createObjectURL(audioBlob);
                 
                 const audio = new Audio(audioUrl);
+                window.currentTTS = audio;
                 
                 // If video recording is active, mix the TTS audio into the video recording
                 if (isRecording && audioContext && mixedAudioDestination) {
@@ -1047,6 +1050,7 @@ HTML_CONTENT = """
         }
         
         function speakWithBrowser(text) {
+            if (interviewFinished) return;
             if ('speechSynthesis' in window) {
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.rate = 0.9;
@@ -1133,6 +1137,15 @@ HTML_CONTENT = """
         }
 
         async function finishInterview() {
+            interviewFinished = true;
+            // Stop any ongoing TTS audio
+            if (window.currentTTS && typeof window.currentTTS.pause === 'function') {
+                window.currentTTS.pause();
+                window.currentTTS = null;
+            }
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
             // Stop all recording completely when finishing
             if (isRecording) {
                 // Force complete stop for finish
@@ -1186,6 +1199,7 @@ HTML_CONTENT = """
             
             if (currentSessionId) {
                 try {
+                    // First, finish the current session
                     const response = await fetch('http://localhost:8000/finish-session', {
                         method: 'POST',
                         headers: {
