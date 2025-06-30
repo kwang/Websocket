@@ -334,9 +334,14 @@ public class InterviewRestController {
             
             List<Map<String, Object>> recordings = new ArrayList<>();
             
-            // List all session directories
+            // List all session directories and sort by creation date (descending)
             List<Path> sessionDirs = Files.list(recordingsDir)
                     .filter(Files::isDirectory)
+                    .sorted((p1, p2) -> {
+                        // Sort by directory name (which contains timestamp) in descending order
+                        // Newest first (most recent timestamp first)
+                        return p2.getFileName().toString().compareTo(p1.getFileName().toString());
+                    })
                     .collect(Collectors.toList());
             
             for (Path sessionDir : sessionDirs) {
