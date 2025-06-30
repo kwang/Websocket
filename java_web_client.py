@@ -1138,7 +1138,8 @@ HTML_CONTENT = """
             }
             
             const formData = new FormData();
-            formData.append('file', videoBlob, `video_recording.${fileExtension}`);
+            // Use the same filename as audio so the server can find it for mixing
+            formData.append('file', videoBlob, `recording.${fileExtension}`);
             
             if (currentSessionId) {
                 formData.append('session_id', currentSessionId);

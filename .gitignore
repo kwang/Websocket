@@ -60,7 +60,7 @@ temp/
 tmp/
 
 # Recordings (optional - uncomment if you don't want to track recordings)
-# recordings/
+recordings/
 
 # Maven
 .mvn/timing.properties

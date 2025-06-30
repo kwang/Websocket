@@ -25,6 +25,11 @@ import okhttp3.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.BufferedWriter;
+import java.nio.file.StandardCopyOption;
+
 @Service
 public class InterviewServiceImpl implements InterviewService {
     
@@ -155,17 +160,18 @@ public class InterviewServiceImpl implements InterviewService {
     public FinishInterviewResponse finishInterview(FinishInterviewRequest request) {
         try {
             String sessionId = request.getSessionId();
-            
-            // In a real implementation, this would combine all audio files
-            // For now, just mark as successful
-            logger.info("Finished interview session: {}", sessionId);
-            
+
+            // Mix TTS audio with user video
+            boolean mixed = mixTTSWithUserVideo(sessionId);
+
+            logger.info("Finished interview session: {}. Mixed video: {}", sessionId, mixed);
+
             return FinishInterviewResponse.newBuilder()
                     .setSuccess(true)
                     .setAudioCombined(true)
-                    .setVideoCombined(false)
+                    .setVideoCombined(mixed)
                     .build();
-                    
+
         } catch (Exception e) {
             logger.error("Error finishing interview", e);
             return FinishInterviewResponse.newBuilder()
@@ -370,5 +376,104 @@ public class InterviewServiceImpl implements InterviewService {
         }
         
         return wavFile;
+    }
+
+    // Helper to mix TTS audio with user video using ffmpeg
+    private boolean mixTTSWithUserVideo(String sessionId) {
+        try {
+            Path sessionDir = config.getRecordingsDir().resolve(sessionId);
+            if (!Files.exists(sessionDir)) {
+                logger.error("Session directory does not exist: {}", sessionDir);
+                return false;
+            }
+
+            // Find all TTS audio files (speech_*.mp3)
+            List<Path> ttsFiles = Files.list(sessionDir)
+                .filter(p -> p.getFileName().toString().startsWith("speech_") && p.getFileName().toString().endsWith(".mp3"))
+                .sorted()
+                .toList();
+            if (ttsFiles.isEmpty()) {
+                logger.error("No TTS audio files found in session: {}", sessionId);
+                return false;
+            }
+
+            // Concatenate TTS audio files
+            Path ttsConcat = sessionDir.resolve("tts_concat.mp3");
+            if (ttsFiles.size() == 1) {
+                Files.copy(ttsFiles.get(0), ttsConcat, StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                // Create file list for ffmpeg
+                Path fileList = sessionDir.resolve("tts_files.txt");
+                try (BufferedWriter writer = Files.newBufferedWriter(fileList)) {
+                    for (Path ttsFile : ttsFiles) {
+                        writer.write("file '" + ttsFile.toAbsolutePath() + "'\n");
+                    }
+                }
+                
+                // Concatenate TTS files
+                ProcessBuilder concatPb = new ProcessBuilder("ffmpeg", "-f", "concat", "-safe", "0", 
+                    "-i", fileList.toString(), "-c", "copy", ttsConcat.toString());
+                Process concatProcess = concatPb.start();
+                int concatExitCode = concatProcess.waitFor();
+                if (concatExitCode != 0) {
+                    logger.error("Failed to concatenate TTS files, exit code: {}", concatExitCode);
+                    return false;
+                }
+                Files.deleteIfExists(fileList);
+            }
+
+            // Find the user's video file (recording.mp4)
+            Path userVideo = sessionDir.resolve("recording.mp4");
+            if (!Files.exists(userVideo)) {
+                logger.error("User video file not found: {}", userVideo);
+                return false;
+            }
+
+            // Check if user file has video stream
+            ProcessBuilder probePb = new ProcessBuilder("ffprobe", "-v", "quiet", "-select_streams", "v", 
+                "-show_entries", "stream=codec_type", "-of", "csv=p=0", userVideo.toString());
+            Process probeProcess = probePb.start();
+            String probeOutput = new String(probeProcess.getInputStream().readAllBytes()).trim();
+            boolean hasVideo = !probeOutput.isEmpty();
+            logger.info("User file {} has video: {}", userVideo.getFileName(), hasVideo);
+
+            // Mix TTS audio with user video
+            Path finalVideo = sessionDir.resolve("final_response.mp4");
+            ProcessBuilder mixPb;
+            
+            if (hasVideo) {
+                // User file has video, mix TTS audio with existing video
+                mixPb = new ProcessBuilder("ffmpeg", "-i", userVideo.toString(), "-i", ttsConcat.toString(),
+                    "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=longest[aout]",
+                    "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", finalVideo.toString());
+            } else {
+                // User file has only audio, create video with black background + mixed audio
+                mixPb = new ProcessBuilder("ffmpeg", "-f", "lavfi", "-i", "color=black:size=1280x720:duration=10",
+                    "-i", userVideo.toString(), "-i", ttsConcat.toString(),
+                    "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=longest[aout]",
+                    "-map", "0:v", "-map", "[aout]", "-c:v", "libx264", "-c:a", "aac", "-shortest", finalVideo.toString());
+            }
+
+            Process mixProcess = mixPb.start();
+            int mixExitCode = mixProcess.waitFor();
+            
+            // Log the command and result
+            String command = String.join(" ", mixPb.command());
+            logger.info("ffmpeg mixing for session {} completed with exit code: {}, success: {}", 
+                sessionId, mixExitCode, mixExitCode == 0);
+            
+            if (mixExitCode != 0) {
+                String errorOutput = new String(mixProcess.getErrorStream().readAllBytes());
+                logger.error("ffmpeg mixing failed: {}", errorOutput);
+                return false;
+            }
+
+            logger.info("Successfully created mixed video: {}", finalVideo);
+            return true;
+
+        } catch (Exception e) {
+            logger.error("Error mixing TTS with user video for session {}: {}", sessionId, e.getMessage(), e);
+            return false;
+        }
     }
 } 

@@ -160,6 +160,18 @@ public class InterviewRestController {
             
             logger.info("Detected audio format: {} from filename: {}", audioFormat, originalFilename);
             
+            // Check if the file already exists (saved by process-video)
+            Path sessionDir = config.getRecordingsDir().resolve(sessionId);
+            Path existingFile = sessionDir.resolve(originalFilename);
+            if (Files.exists(existingFile)) {
+                logger.info("File already exists from process-video, skipping save: {}", existingFile);
+            } else {
+                // Save the file if it doesn't exist
+                Files.createDirectories(sessionDir);
+                Files.write(existingFile, audioData);
+                logger.info("Saved audio file: {}", existingFile);
+            }
+            
             // Create gRPC request
             ProcessAudioRequest grpcRequest = ProcessAudioRequest.newBuilder()
                     .setSessionId(sessionId)
@@ -216,8 +228,8 @@ public class InterviewRestController {
             
             logger.info("Detected video format: {} from filename: {}", videoFormat, originalFilename);
             
-            // Save video file directly
-            String videoFileName = "video_" + System.currentTimeMillis() + "." + videoFormat;
+            // Save video file directly with original filename
+            String videoFileName = originalFilename != null ? originalFilename : "recording." + videoFormat;
             Path videoPath = config.getRecordingsDir().resolve(sessionId).resolve(videoFileName);
             Files.write(videoPath, videoData);
             
