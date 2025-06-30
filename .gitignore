@@ -65,3 +65,4 @@ recordings/
 # Maven
 .mvn/timing.properties
 .mvn/wrapper/maven-wrapper.jar
+config.py
