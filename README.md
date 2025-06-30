@@ -81,6 +81,39 @@ A Python-based AI interview system that conducts voice interviews, records audio
    OPENAI_API_KEY = "your-api-key-here"
    ```
 
+### Configuration Setup
+
+The system uses a configuration file to manage settings. Here's how to set it up:
+
+1. **Copy the example configuration:**
+   ```bash
+   cp config.example.py config.py
+   ```
+
+2. **Set your OpenAI API key:**
+
+   **Option A: Environment Variable (Recommended)**
+   ```bash
+   export OPENAI_API_KEY="your-actual-openai-api-key"
+   ```
+   
+   **Option B: Direct in config.py**
+   ```python
+   OPENAI_API_KEY = "your-actual-openai-api-key"
+   ```
+
+3. **Get your OpenAI API key:**
+   - Visit [OpenAI Platform](https://platform.openai.com/api-keys)
+   - Create a new API key
+   - Copy the key and use it in the configuration
+
+### Security Notes
+
+- ✅ `config.py` is automatically ignored by git
+- ✅ Use environment variables for API keys in production
+- ✅ Never commit real API keys to version control
+- ✅ The example config shows the structure without real credentials
+
 ## Usage
 
 ### Quick Start
