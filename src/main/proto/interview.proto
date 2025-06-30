@@ -1,0 +1,288 @@
+syntax = "proto3";
+
+package com.interview.grpc;
+
+option java_multiple_files = true;
+option java_package = "com.interview.grpc";
+option java_outer_classname = "InterviewProto";
+
+// Interview Service - Main gRPC service for interview functionality
+service InterviewService {
+  // Start a new interview session
+  rpc StartInterview(StartInterviewRequest) returns (StartInterviewResponse);
+  
+  // Send audio for transcription and get follow-up question
+  rpc ProcessAudio(ProcessAudioRequest) returns (ProcessAudioResponse);
+  
+  // Generate text-to-speech for interviewer questions
+  rpc GenerateSpeech(GenerateSpeechRequest) returns (GenerateSpeechResponse);
+  
+  // Finish interview session and combine recordings
+  rpc FinishInterview(FinishInterviewRequest) returns (FinishInterviewResponse);
+  
+  // Get interview questions
+  rpc GetInterviewQuestions(GetQuestionsRequest) returns (GetQuestionsResponse);
+}
+
+// WebSocket-like streaming service for real-time communication
+service InterviewStreamService {
+  // Bidirectional streaming for real-time interview
+  rpc InterviewStream(stream InterviewMessage) returns (stream InterviewMessage);
+}
+
+// File Management Service
+service FileService {
+  // Upload audio file
+  rpc UploadAudio(stream AudioChunk) returns (UploadResponse);
+  
+  // Upload video file
+  rpc UploadVideo(stream VideoChunk) returns (UploadResponse);
+  
+  // Download file
+  rpc DownloadFile(DownloadRequest) returns (stream FileChunk);
+  
+  // List recordings
+  rpc ListRecordings(ListRecordingsRequest) returns (ListRecordingsResponse);
+  
+  // Get session recordings
+  rpc GetSessionRecordings(GetSessionRequest) returns (GetSessionResponse);
+}
+
+// Video Processing Service
+service VideoService {
+  // Annotate video with overlays
+  rpc AnnotateVideo(AnnotateVideoRequest) returns (AnnotateVideoResponse);
+  
+  // Generate subtitles for video
+  rpc GenerateSubtitles(GenerateSubtitlesRequest) returns (GenerateSubtitlesResponse);
+  
+  // Create enhanced video with multiple features
+  rpc CreateEnhancedVideo(CreateEnhancedVideoRequest) returns (CreateEnhancedVideoResponse);
+}
+
+// Request/Response Messages for InterviewService
+
+message StartInterviewRequest {
+  string client_id = 1;
+  string session_id = 2;
+}
+
+message StartInterviewResponse {
+  string session_id = 1;
+  string greeting_message = 2;
+  bool success = 3;
+  string error_message = 4;
+}
+
+message ProcessAudioRequest {
+  bytes audio_data = 1;
+  string session_id = 2;
+  string client_id = 3;
+  string audio_format = 4; // mp3, wav, webm
+}
+
+message ProcessAudioResponse {
+  string transcription = 1;
+  string follow_up_question = 2;
+  bool success = 3;
+  string error_message = 4;
+  string audio_file_path = 5;
+}
+
+message GenerateSpeechRequest {
+  string text = 1;
+  string voice = 2; // alloy, echo, fable, onyx, nova, shimmer
+  string session_id = 3;
+}
+
+message GenerateSpeechResponse {
+  bytes audio_data = 1;
+  bool success = 3;
+  string error_message = 4;
+  string audio_file_path = 5;
+}
+
+message FinishInterviewRequest {
+  string session_id = 1;
+}
+
+message FinishInterviewResponse {
+  bool success = 1;
+  string error_message = 2;
+  bool audio_combined = 3;
+  bool video_combined = 4;
+}
+
+message GetQuestionsRequest {
+  string category = 1; // introduction, experience, skills, etc.
+}
+
+message GetQuestionsResponse {
+  repeated string questions = 1;
+}
+
+// Messages for InterviewStreamService
+
+message InterviewMessage {
+  oneof content {
+    string text = 1;
+    bytes audio_data = 2;
+    InterviewEvent event = 3;
+  }
+  string session_id = 4;
+  string client_id = 5;
+  MessageType message_type = 6;
+}
+
+enum MessageType {
+  UNKNOWN = 0;
+  GREETING = 1;
+  QUESTION = 2;
+  ANSWER = 3;
+  FOLLOW_UP = 4;
+  AUDIO = 5;
+  EVENT = 6;
+}
+
+message InterviewEvent {
+  EventType event_type = 1;
+  string message = 2;
+  map<string, string> metadata = 3;
+}
+
+enum EventType {
+  SESSION_STARTED = 0;
+  SESSION_ENDED = 1;
+  AUDIO_RECEIVED = 2;
+  TRANSCRIPTION_COMPLETE = 3;
+  QUESTION_GENERATED = 4;
+  ERROR = 5;
+}
+
+// Messages for FileService
+
+message AudioChunk {
+  bytes data = 1;
+  string session_id = 2;
+  string filename = 3;
+  bool is_last_chunk = 4;
+}
+
+message VideoChunk {
+  bytes data = 1;
+  string session_id = 2;
+  string filename = 3;
+  bool is_last_chunk = 4;
+}
+
+message UploadResponse {
+  bool success = 1;
+  string error_message = 2;
+  string file_path = 3;
+  string filename = 4;
+}
+
+message DownloadRequest {
+  string session_id = 1;
+  string filename = 2;
+}
+
+message FileChunk {
+  bytes data = 1;
+  bool is_last_chunk = 2;
+  string filename = 3;
+}
+
+message ListRecordingsRequest {
+  string filter = 1; // Optional filter
+}
+
+message ListRecordingsResponse {
+  repeated RecordingSession sessions = 1;
+}
+
+message RecordingSession {
+  string session_id = 1;
+  repeated string audio_files = 2;
+  repeated string video_files = 3;
+  repeated string metadata_files = 4;
+  string combined_audio = 5;
+  string combined_video = 6;
+  string start_time = 7;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message GetSessionResponse {
+  RecordingSession session = 1;
+  bool success = 2;
+  string error_message = 3;
+}
+
+// Messages for VideoService
+
+message AnnotateVideoRequest {
+  string session_id = 1;
+  string video_filename = 2;
+  VideoAnnotations annotations = 3;
+}
+
+message VideoAnnotations {
+  bool show_timestamp = 1;
+  bool show_progress = 2;
+  string text_overlay = 3;
+  string watermark = 4;
+  string session_info = 5;
+  string subtitle_path = 6;
+}
+
+message AnnotateVideoResponse {
+  bool success = 1;
+  string error_message = 2;
+  string annotated_filename = 3;
+}
+
+message GenerateSubtitlesRequest {
+  string session_id = 1;
+  string video_filename = 2;
+}
+
+message GenerateSubtitlesResponse {
+  bool success = 1;
+  string error_message = 2;
+  string subtitle_filename = 3;
+  string transcription = 4;
+}
+
+message CreateEnhancedVideoRequest {
+  string session_id = 1;
+  string video_filename = 2;
+  VideoEnhancementOptions options = 3;
+}
+
+message VideoEnhancementOptions {
+  bool show_timestamp = 1;
+  bool show_progress = 2;
+  bool generate_subtitles = 3;
+  string text_overlay = 4;
+  string watermark = 5;
+  string session_info = 6;
+}
+
+message CreateEnhancedVideoResponse {
+  bool success = 1;
+  string error_message = 2;
+  string enhanced_filename = 3;
+  VideoFeatures features = 4;
+}
+
+message VideoFeatures {
+  bool timestamp = 1;
+  bool progress_bar = 2;
+  bool subtitles = 3;
+  bool custom_text = 4;
+  bool watermark = 5;
+  bool session_info = 6;
+} 

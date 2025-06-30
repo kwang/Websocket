@@ -1148,5 +1148,342 @@ async def save_video(file: UploadFile = File(...), client_id: str = Form(None), 
         print(f"Error saving video: {e}")
         return {"error": f"Failed to save video: {str(e)}"}
 
+def add_video_annotations(input_path: Path, output_path: Path, annotations: dict = None):
+    """Add annotations to a video file using ffmpeg"""
+    try:
+        if not annotations:
+            annotations = {}
+        
+        # Build ffmpeg command with filters
+        filters = []
+        
+        # Add timestamp overlay
+        if annotations.get("show_timestamp", True):
+            filters.append("drawtext=text='%{pts\\:hms}':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:boxborderw=5:x=10:y=10")
+        
+        # Add custom text overlay
+        if annotations.get("text_overlay"):
+            text = annotations["text_overlay"]
+            # Escape special characters for ffmpeg
+            text = text.replace("'", "\\'").replace(":", "\\:")
+            filters.append(f"drawtext=text='{text}':fontcolor=white:fontsize=20:box=1:boxcolor=black@0.5:boxborderw=5:x=10:y=50")
+        
+        # Add subtitle file if provided
+        subtitle_path = annotations.get("subtitle_path")
+        if subtitle_path and Path(subtitle_path).exists():
+            # Use relative path for subtitle file
+            subtitle_filename = Path(subtitle_path).name
+            filters.append(f"subtitles={subtitle_filename}")
+        
+        # Add watermark or logo if specified
+        if annotations.get("watermark"):
+            watermark_text = annotations["watermark"]
+            watermark_text = watermark_text.replace("'", "\\'").replace(":", "\\:")
+            filters.append(f"drawtext=text='{watermark_text}':fontcolor=white@0.7:fontsize=16:box=1:boxcolor=black@0.3:boxborderw=3:x=iw-tw-10:y=10")
+        
+        # Add interview session info
+        if annotations.get("session_info"):
+            session_text = annotations["session_info"]
+            session_text = session_text.replace("'", "\\'").replace(":", "\\:")
+            filters.append(f"drawtext=text='{session_text}':fontcolor=white:fontsize=14:box=1:boxcolor=black@0.5:boxborderw=3:x=10:y=ih-th-40")
+        
+        # Add progress bar (fixed syntax)
+        if annotations.get("show_progress", True):
+            # Background bar
+            filters.append("drawbox=y=ih-30:color=black@0.5:width=iw:height=30:t=fill")
+            # Progress bar that fills based on current time vs duration
+            filters.append("drawbox=y=ih-30:color=white:width='iw*t/duration':height=5:t=fill")
+        
+        # Build the complete ffmpeg command
+        cmd = [
+            'ffmpeg', '-i', str(input_path),
+            '-vf', ','.join(filters) if filters else 'null',
+            '-c:a', 'copy',  # Copy audio without re-encoding
+            '-y', str(output_path)
+        ]
+        
+        print(f"Adding annotations to video: {input_path}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print(f"Successfully annotated video: {output_path}")
+            return True
+        else:
+            print(f"Error adding annotations: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        print(f"Error in add_video_annotations: {e}")
+        return False
+
+def generate_subtitle_file(transcriptions: list, output_path: Path):
+    """Generate SRT subtitle file from transcriptions"""
+    try:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            for i, trans in enumerate(transcriptions, 1):
+                start_time = trans.get("start_time", 0)
+                end_time = trans.get("end_time", start_time + 5)
+                text = trans.get("text", "")
+                
+                # Convert seconds to SRT time format (HH:MM:SS,mmm)
+                start_str = f"{int(start_time//3600):02d}:{int((start_time%3600)//60):02d}:{int(start_time%60):02d},{int((start_time%1)*1000):03d}"
+                end_str = f"{int(end_time//3600):02d}:{int((end_time%3600)//60):02d}:{int(end_time%60):02d},{int((end_time%1)*1000):03d}"
+                
+                f.write(f"{i}\n")
+                f.write(f"{start_str} --> {end_str}\n")
+                f.write(f"{text}\n\n")
+        
+        print(f"Generated subtitle file: {output_path}")
+        return True
+    except Exception as e:
+        print(f"Error generating subtitle file: {e}")
+        return False
+
+def create_annotated_video(session_dir: Path, video_filename: str, annotations: dict = None):
+    """Create an annotated version of a video file"""
+    try:
+        input_path = session_dir / video_filename
+        if not input_path.exists():
+            print(f"Video file not found: {input_path}")
+            return None
+        
+        # Generate annotated filename
+        name_parts = video_filename.rsplit('.', 1)
+        annotated_filename = f"{name_parts[0]}_annotated.{name_parts[1]}"
+        output_path = session_dir / annotated_filename
+        
+        # Add annotations
+        success = add_video_annotations(input_path, output_path, annotations)
+        
+        if success:
+            return annotated_filename
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Error creating annotated video: {e}")
+        return None
+
+def extract_audio_from_video(video_path: Path, audio_path: Path):
+    """Extract audio from video file"""
+    try:
+        cmd = [
+            'ffmpeg', '-i', str(video_path),
+            '-vn', '-acodec', 'pcm_s16le',
+            '-ar', '44100', '-ac', '1',
+            '-y', str(audio_path)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print(f"Successfully extracted audio: {audio_path}")
+            return True
+        else:
+            print(f"Error extracting audio: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        print(f"Error in extract_audio_from_video: {e}")
+        return False
+
+def transcribe_video_audio(video_path: Path, session_dir: Path):
+    """Extract audio from video and transcribe it"""
+    try:
+        # Extract audio to temporary file
+        temp_audio_path = session_dir / "temp_audio.wav"
+        if not extract_audio_from_video(video_path, temp_audio_path):
+            return None
+        
+        # Transcribe the audio
+        result = model.transcribe(str(temp_audio_path))
+        
+        # Clean up temp file
+        temp_audio_path.unlink(missing_ok=True)
+        
+        return result.get("text", "")
+        
+    except Exception as e:
+        print(f"Error transcribing video audio: {e}")
+        return None
+
+@app.post("/annotate-video")
+async def annotate_video(request: Request):
+    """Add annotations to a video file"""
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        video_filename = data.get("video_filename")
+        annotations = data.get("annotations", {})
+        
+        if not session_id or not video_filename:
+            return {"error": "session_id and video_filename are required"}
+        
+        session_dir = RECORDINGS_DIR / session_id
+        if not session_dir.exists():
+            return {"error": f"Session directory not found: {session_id}"}
+        
+        # Create annotated video
+        annotated_filename = create_annotated_video(session_dir, video_filename, annotations)
+        
+        if annotated_filename:
+            return {
+                "success": True,
+                "annotated_filename": annotated_filename,
+                "session_id": session_id
+            }
+        else:
+            return {"error": "Failed to create annotated video"}
+            
+    except Exception as e:
+        print(f"Error annotating video: {e}")
+        return {"error": f"Failed to annotate video: {str(e)}"}
+
+@app.post("/generate-subtitles")
+async def generate_subtitles(request: Request):
+    """Generate subtitle file for a video"""
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        video_filename = data.get("video_filename")
+        
+        if not session_id or not video_filename:
+            return {"error": "session_id and video_filename are required"}
+        
+        session_dir = RECORDINGS_DIR / session_id
+        if not session_dir.exists():
+            return {"error": f"Session directory not found: {session_id}"}
+        
+        video_path = session_dir / video_filename
+        if not video_path.exists():
+            return {"error": f"Video file not found: {video_filename}"}
+        
+        # Transcribe video audio
+        transcription = transcribe_video_audio(video_path, session_dir)
+        
+        if not transcription:
+            return {"error": "Failed to transcribe video audio"}
+        
+        # Generate subtitle file
+        subtitle_filename = f"{video_filename.rsplit('.', 1)[0]}.srt"
+        subtitle_path = session_dir / subtitle_filename
+        
+        # Create simple subtitle with the full transcription
+        transcriptions = [{
+            "start_time": 0,
+            "end_time": 300,  # 5 minutes default
+            "text": transcription
+        }]
+        
+        success = generate_subtitle_file(transcriptions, subtitle_path)
+        
+        if success:
+            return {
+                "success": True,
+                "subtitle_filename": subtitle_filename,
+                "transcription": transcription,
+                "session_id": session_id
+            }
+        else:
+            return {"error": "Failed to generate subtitle file"}
+            
+    except Exception as e:
+        print(f"Error generating subtitles: {e}")
+        return {"error": f"Failed to generate subtitles: {str(e)}"}
+
+@app.post("/create-enhanced-video")
+async def create_enhanced_video(request: Request):
+    """Create an enhanced video with annotations and subtitles"""
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        video_filename = data.get("video_filename")
+        options = data.get("options", {})
+        
+        if not session_id or not video_filename:
+            return {"error": "session_id and video_filename are required"}
+        
+        session_dir = RECORDINGS_DIR / session_id
+        if not session_dir.exists():
+            return {"error": f"Session directory not found: {session_id}"}
+        
+        video_path = session_dir / video_filename
+        if not video_path.exists():
+            return {"error": f"Video file not found: {video_filename}"}
+        
+        # Prepare annotations
+        annotations = {
+            "show_timestamp": options.get("show_timestamp", True),
+            "show_progress": options.get("show_progress", True),
+            "text_overlay": options.get("text_overlay", ""),
+            "watermark": options.get("watermark", ""),
+            "session_info": options.get("session_info", "")
+        }
+        
+        # Generate subtitles if requested
+        if options.get("generate_subtitles", True):
+            transcription = transcribe_video_audio(video_path, session_dir)
+            if transcription:
+                subtitle_filename = f"{video_filename.rsplit('.', 1)[0]}.srt"
+                subtitle_path = session_dir / subtitle_filename
+                
+                transcriptions = [{
+                    "start_time": 0,
+                    "end_time": 300,
+                    "text": transcription
+                }]
+                
+                if generate_subtitle_file(transcriptions, subtitle_path):
+                    annotations["subtitle_path"] = str(subtitle_path)
+        
+        # Create enhanced video
+        enhanced_filename = create_annotated_video(session_dir, video_filename, annotations)
+        
+        if enhanced_filename:
+            return {
+                "success": True,
+                "enhanced_filename": enhanced_filename,
+                "session_id": session_id,
+                "features": {
+                    "timestamp": annotations.get("show_timestamp"),
+                    "progress_bar": annotations.get("show_progress"),
+                    "subtitles": "subtitle_path" in annotations,
+                    "custom_text": bool(annotations.get("text_overlay")),
+                    "watermark": bool(annotations.get("watermark")),
+                    "session_info": bool(annotations.get("session_info"))
+                }
+            }
+        else:
+            return {"error": "Failed to create enhanced video"}
+            
+    except Exception as e:
+        print(f"Error creating enhanced video: {e}")
+        return {"error": f"Failed to create enhanced video: {str(e)}"}
+
+@app.get("/video-annotation-options")
+async def get_video_annotation_options():
+    """Get available video annotation options"""
+    return {
+        "annotation_types": {
+            "timestamp": "Add timestamp overlay to video",
+            "progress_bar": "Add progress bar at bottom of video",
+            "subtitles": "Generate and overlay subtitles",
+            "custom_text": "Add custom text overlay",
+            "watermark": "Add watermark or logo"
+        },
+        "text_positions": {
+            "top_left": "Position text in top-left corner",
+            "top_right": "Position text in top-right corner",
+            "bottom_left": "Position text in bottom-left corner",
+            "bottom_right": "Position text in bottom-right corner",
+            "center": "Position text in center"
+        },
+        "font_options": {
+            "sizes": [12, 16, 20, 24, 28, 32],
+            "colors": ["white", "black", "red", "green", "blue", "yellow"],
+            "styles": ["normal", "bold", "italic"]
+        }
+    }
+
 if __name__ == "__main__":
     uvicorn.run("server:app", host=HOST, port=PORT, reload=DEBUG)
