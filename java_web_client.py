@@ -354,7 +354,7 @@ HTML_CONTENT = """
         }
         #videoPreview {
             width: 100%;
-            max-width: 640px;
+            max-width: 320px;
             height: auto;
             border: 2px solid #ddd;
             border-radius: 8px;
@@ -697,6 +697,14 @@ HTML_CONTENT = """
                     <label>
                         <input type="checkbox" id="enableDesktopAudio" checked> Enable Desktop Audio Capture
                     </label>
+                    <div style="margin-top: 10px; padding: 8px; background: #e8f5e8; border-radius: 4px; font-size: 12px;">
+                        📹 <strong>Video Quality:</strong> 
+                        <select id="videoQuality" onchange="updateVideoQuality()" style="margin-left: 5px; padding: 2px;">
+                            <option value="low">Low (480p, 15fps, 500kbps) - Smallest files</option>
+                            <option value="medium">Medium (720p, 20fps, 1Mbps) - Balanced</option>
+                            <option value="high">High (1080p, 30fps, 2Mbps) - Best quality</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             
@@ -824,6 +832,12 @@ HTML_CONTENT = """
         let audioContext = null;
         let mixedAudioDestination = null;
         let currentVoice = 'alloy';
+        let videoQualitySettings = {
+            low: { width: 640, height: 480, frameRate: 15, videoBitrate: 500000 },
+            medium: { width: 1280, height: 720, frameRate: 20, videoBitrate: 1000000 },
+            high: { width: 1920, height: 1080, frameRate: 30, videoBitrate: 2000000 }
+        };
+        let currentVideoQuality = 'low';
 
         function showTab(tabName) {
             // Hide all tab contents
@@ -973,13 +987,14 @@ HTML_CONTENT = """
                     return;
                 }
                 
-                // Get media stream
+                // Get media stream with dynamic quality settings
+                const qualitySettings = videoQualitySettings[currentVideoQuality];
                 const constraints = {
                     audio: enableAudio,
                     video: enableVideo ? {
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        frameRate: { ideal: 30 }
+                        width: { ideal: qualitySettings.width, max: qualitySettings.width },
+                        height: { ideal: qualitySettings.height, max: qualitySettings.height },
+                        frameRate: { ideal: qualitySettings.frameRate, max: qualitySettings.frameRate + 5 }
                     } : false
                 };
                 
@@ -1042,7 +1057,21 @@ HTML_CONTENT = """
                     }
                     
                     console.log('Using video format:', videoMimeType);
-                    videoRecorder = new MediaRecorder(combinedStream, { mimeType: videoMimeType });
+                    
+                    // Configure MediaRecorder with dynamic quality settings
+                    const recordingOptions = {
+                        mimeType: videoMimeType,
+                        videoBitsPerSecond: qualitySettings.videoBitrate,
+                        audioBitsPerSecond: 64000    // 64 kbps for audio
+                    };
+                    
+                    // Fallback if bitrate settings not supported
+                    try {
+                        videoRecorder = new MediaRecorder(combinedStream, recordingOptions);
+                    } catch (e) {
+                        console.log('Bitrate options not supported, using basic settings');
+                        videoRecorder = new MediaRecorder(combinedStream, { mimeType: videoMimeType });
+                    }
                     
                     videoRecorder.ondataavailable = (event) => {
                         videoChunks.push(event.data);
@@ -1053,7 +1082,8 @@ HTML_CONTENT = """
                         await processVideoRecording();
                     };
                     
-                    videoRecorder.start();
+                    // Start recording with time slicing for streaming (5 second chunks)
+                    videoRecorder.start(5000);
                 }
                 
                 document.getElementById('startRecording').disabled = true;
@@ -1391,6 +1421,12 @@ HTML_CONTENT = """
 
         function changeVoice() {
             currentVoice = document.getElementById('voiceSelect').value;
+        }
+
+        function updateVideoQuality() {
+            currentVideoQuality = document.getElementById('videoQuality').value;
+            const qualitySettings = videoQualitySettings[currentVideoQuality];
+            console.log('Video quality updated to:', currentVideoQuality, qualitySettings);
         }
 
         function toggleAutoRecording() {

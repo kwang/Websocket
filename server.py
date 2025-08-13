@@ -1103,10 +1103,13 @@ async def save_video(file: UploadFile = File(...), client_id: str = Form(None), 
             mp4_filename = f"response_{timestamp}.mp4"
             mp4_path = session_dir / mp4_filename
             try:
+                # Optimized settings for small file size
                 cmd = [
                     "ffmpeg", "-i", str(video_path),
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "128k",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32",
+                    "-s", "640x480",  # Reduce resolution 
+                    "-r", "15",       # Reduce frame rate to 15fps
+                    "-c:a", "aac", "-b:a", "64k",  # Lower audio bitrate
                     "-movflags", "+faststart", "-y", str(mp4_path)
                 ]
                 result = subprocess.run(cmd, capture_output=True, text=True)

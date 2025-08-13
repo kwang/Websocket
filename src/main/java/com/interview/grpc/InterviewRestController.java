@@ -233,6 +233,31 @@ public class InterviewRestController {
             Path videoPath = config.getRecordingsDir().resolve(sessionId).resolve(videoFileName);
             Files.write(videoPath, videoData);
             
+            // Compress video immediately after upload for smaller file size
+            if (videoFormat.equals("webm") || videoFormat.equals("mp4")) {
+                Path compressedPath = config.getRecordingsDir().resolve(sessionId).resolve("recording.mp4");
+                try {
+                    ProcessBuilder compressPb = new ProcessBuilder("ffmpeg", "-i", videoPath.toString(),
+                        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32",
+                        "-s", "640x480", "-r", "15",  // Reduce resolution and frame rate
+                        "-c:a", "aac", "-b:a", "64k", "-y", compressedPath.toString());
+                    Process compressProcess = compressPb.start();
+                    int compressExitCode = compressProcess.waitFor();
+                    
+                    if (compressExitCode == 0) {
+                        logger.info("Successfully compressed video: {} -> {}", videoPath, compressedPath);
+                        // Replace original with compressed version
+                        Files.deleteIfExists(videoPath);
+                        videoPath = compressedPath;
+                        videoFileName = "recording.mp4";
+                    } else {
+                        logger.warn("Video compression failed, keeping original file");
+                    }
+                } catch (Exception e) {
+                    logger.warn("Error compressing video: {}", e.getMessage());
+                }
+            }
+            
             // Convert to HTTP response
             Map<String, Object> httpResponse = new HashMap<>();
             httpResponse.put("success", true);

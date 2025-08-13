@@ -65,4 +65,11 @@ recordings/
 # Maven
 .mvn/timing.properties
 .mvn/wrapper/maven-wrapper.jar
+
+# Configuration files with API keys (security)
 config.py
+src/main/resources/application.yml
+
+# Test files that may contain API keys
+test_tts.py
+test_openai_integration.py

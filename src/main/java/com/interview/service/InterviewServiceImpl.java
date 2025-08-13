@@ -442,16 +442,21 @@ public class InterviewServiceImpl implements InterviewService {
             ProcessBuilder mixPb;
             
             if (hasVideo) {
-                // User file has video, mix TTS audio with existing video
+                // User file has video, mix TTS audio with existing video + compress for smaller file size
                 mixPb = new ProcessBuilder("ffmpeg", "-i", userVideo.toString(), "-i", ttsConcat.toString(),
                     "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=longest[aout]",
-                    "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", finalVideo.toString());
+                    "-map", "0:v", "-map", "[aout]", 
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32",
+                    "-s", "640x480", "-r", "15",  // Reduce resolution and frame rate
+                    "-c:a", "aac", "-b:a", "64k", "-y", finalVideo.toString());
             } else {
-                // User file has only audio, create video with black background + mixed audio
-                mixPb = new ProcessBuilder("ffmpeg", "-f", "lavfi", "-i", "color=black:size=1280x720:duration=10",
+                // User file has only audio, create video with black background + mixed audio (optimized)
+                mixPb = new ProcessBuilder("ffmpeg", "-f", "lavfi", "-i", "color=black:size=640x480:duration=10",
                     "-i", userVideo.toString(), "-i", ttsConcat.toString(),
                     "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=longest[aout]",
-                    "-map", "0:v", "-map", "[aout]", "-c:v", "libx264", "-c:a", "aac", "-shortest", finalVideo.toString());
+                    "-map", "0:v", "-map", "[aout]", 
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32", "-r", "15",
+                    "-c:a", "aac", "-b:a", "64k", "-shortest", "-y", finalVideo.toString());
             }
 
             Process mixProcess = mixPb.start();
